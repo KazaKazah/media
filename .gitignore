@@ -1,0 +1,23 @@
+.idea/
+.vscode/
+db.sqlite3
+venv/
+media/
+__pycache__
+*.pyc
+
+local_settings.py
+
+private/
+rest-client/
+apps/photo/static/
+some_files/
+
+# django migrations
+**/migrations/**
+!**/migrations
+!**/migrations/__init__.py
+.DS_Store
+
+
+.env
