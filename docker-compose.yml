@@ -1,0 +1,30 @@
+services:
+  dropandtag:
+    build: .
+    container_name: dropandtag
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MEDIA_ROOT: "/media/photos"
+      APP_DATA_DIR: "/app/data"
+      SQLITE_PATH: "/app/data/db.sqlite3"
+      MEDIA_PAGE_SIZE: "${MEDIA_PAGE_SIZE:-60}"
+      MEDIA_TREE_MAX_DEPTH: "${MEDIA_TREE_MAX_DEPTH:-4}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-*}"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-0}"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-change-this-secret-on-nas-before-use}"
+      DJANGO_SECURE_SSL_REDIRECT: "${DJANGO_SECURE_SSL_REDIRECT:-0}"
+      DJANGO_SECURE_HSTS_SECONDS: "${DJANGO_SECURE_HSTS_SECONDS:-0}"
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: "${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:-0}"
+      DJANGO_SECURE_HSTS_PRELOAD: "${DJANGO_SECURE_HSTS_PRELOAD:-0}"
+      DJANGO_SESSION_COOKIE_SECURE: "${DJANGO_SESSION_COOKIE_SECURE:-0}"
+      DJANGO_CSRF_COOKIE_SECURE: "${DJANGO_CSRF_COOKIE_SECURE:-0}"
+      TZ: "${TZ:-Asia/Qyzylorda}"
+    volumes:
+      - ./data:/app/data
+      - ${PHOTO_ROOT:-/volume1/photo}:/media/photos

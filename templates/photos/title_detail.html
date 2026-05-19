@@ -1,0 +1,86 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title.name }} — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body>
+    <main class="catalog-shell">
+      <nav class="detail-nav">
+        <a href="{% url 'photos:index' %}">← Каталог</a>
+        <a href="{% url 'photos:media_library' %}">Медиатека</a>
+        <a href="{% url 'photos:title_edit' title.slug %}">Редактировать тайтл</a>
+      </nav>
+
+      <section class="title-hero">
+        <div class="title-hero-poster">
+          {% if title.poster_path %}
+            <img src="/media/{{ title.poster_path }}" alt="">
+          {% else %}
+            <span>{{ title.get_kind_display }}</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="title-kind">{{ title.get_kind_display }}</span>
+          <h1>{{ title.name }}</h1>
+          {% if title.original_name %}<p class="lead">{{ title.original_name }}</p>{% endif %}
+          {% if title.description %}<p>{{ title.description }}</p>{% endif %}
+          {% if title.gallery_folder %}
+            <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}?path={{ title.gallery_folder }}">Открыть галерею тайтла</a>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="catalog-layout">
+        <div class="character-board">
+          <h2>Персонажи</h2>
+          <div class="gender-columns">
+            <section>
+              <h3>Женский</h3>
+              <div class="character-list">
+                {% for character in female_characters %}
+                  {% include "photos/partials/character_card.html" %}
+                {% empty %}
+                  <p class="text-secondary">Нет персонажей.</p>
+                {% endfor %}
+              </div>
+            </section>
+            <section>
+              <h3>Мужской</h3>
+              <div class="character-list">
+                {% for character in male_characters %}
+                  {% include "photos/partials/character_card.html" %}
+                {% empty %}
+                  <p class="text-secondary">Нет персонажей.</p>
+                {% endfor %}
+              </div>
+            </section>
+            <section>
+              <h3>Другое</h3>
+              <div class="character-list">
+                {% for character in other_characters %}
+                  {% include "photos/partials/character_card.html" %}
+                {% empty %}
+                  <p class="text-secondary">Нет персонажей.</p>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <aside class="catalog-form-panel">
+          <h2>Добавить персонажа</h2>
+          <form method="post" class="stack-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-success w-100" type="submit">Создать персонажа</button>
+          </form>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

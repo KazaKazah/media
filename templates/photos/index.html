@@ -1,0 +1,95 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar border-end">
+        <div class="d-flex align-items-center gap-3 p-3">
+          <div class="brand-mark">DT</div>
+          <div class="min-w-0">
+            <h1 class="h5 mb-0">Drop and Tag</h1>
+            <div class="small text-secondary text-truncate" id="mediaRoot">NAS photo library</div>
+          </div>
+        </div>
+        <div class="px-3 pb-3 d-grid gap-2">
+          <button class="btn btn-outline-light w-100" id="refreshTree" type="button">Обновить дерево</button>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-warning w-100" type="submit">Выйти</button>
+          </form>
+        </div>
+        <nav class="tree px-2 pb-3" id="tree"></nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3">
+          <div>
+            <div class="text-uppercase small text-secondary">Текущая папка</div>
+            <h2 class="h3 mb-0 path-heading" id="currentPath">/</h2>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-success" id="createFolder" type="button">Создать папку</button>
+            <input class="form-control" id="search" type="search" placeholder="Поиск по имени или тегу">
+          </div>
+        </header>
+
+        <section class="drop-zone rounded-3 p-3 mb-3" id="dropZone">
+          <div>
+            <strong>Перетащите сюда фото, видео или элемент из приложения</strong>
+            <div class="text-secondary">Файлы с компьютера загрузятся в текущую папку, элементы из приложения будут перенесены.</div>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="min-w-0">
+            <div class="folder-grid mb-3" id="folderRow"></div>
+            <div class="gallery" id="gallery"></div>
+          </div>
+
+          <aside class="inspector rounded-3" id="inspector">
+            <div class="p-4">
+              <h3 class="h5">Выберите элемент</h3>
+              <p class="text-secondary mb-0">Здесь появятся просмотр, теги, перенос, переименование и удаление.</p>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal fade" id="viewerModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content viewer-modal">
+          <div class="modal-header border-0">
+            <div>
+              <h2 class="modal-title h5" id="viewerTitle">Просмотр</h2>
+              <div class="small text-secondary">
+                <span id="viewerPath"></span>
+                <span class="viewer-counter" id="viewerCounter"></span>
+              </div>
+            </div>
+            <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+          </div>
+          <div class="modal-body viewer-body">
+            <button class="viewer-nav viewer-prev" id="viewerPrev" type="button" aria-label="Предыдущее фото">
+              <span>‹</span>
+            </button>
+            <div class="viewer-stage" id="viewerBody"></div>
+            <button class="viewer-nav viewer-next" id="viewerNext" type="button" aria-label="Следующее фото">
+              <span>›</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'photos/app.js' %}"></script>
+  </body>
+</html>

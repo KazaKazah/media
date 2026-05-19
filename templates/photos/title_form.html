@@ -1,0 +1,27 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Редактировать {{ title.name }}</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body>
+    <main class="catalog-shell narrow">
+      <nav class="detail-nav">
+        <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
+        <a href="{% url 'photos:index' %}">Каталог</a>
+      </nav>
+      <section class="catalog-form-panel wide">
+        <h1>Редактировать тайтл</h1>
+        <form method="post" class="stack-form">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button class="btn btn-success" type="submit">Сохранить</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

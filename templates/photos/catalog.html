@@ -1,0 +1,85 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Каталог — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body>
+    <main class="catalog-shell">
+      <header class="catalog-header catalog-hero">
+        <div class="catalog-hero-copy">
+          <div class="brand-mark mb-3">DT</div>
+          <h1>Тайтлы</h1>
+          <p>Аниме, манга, персонажи и привязанные медиа-галереи.</p>
+        </div>
+        <nav class="catalog-nav">
+          <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#createTitlePanel" aria-expanded="false" aria-controls="createTitlePanel">Добавить тайтл</button>
+          <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}">Медиатека</a>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-secondary" type="submit">Выйти</button>
+          </form>
+        </nav>
+      </header>
+
+      <section class="collapse" id="createTitlePanel">
+        <div class="catalog-form-panel title-create-panel">
+          <div>
+            <h2>Новая карточка</h2>
+            <p>Создайте тайтл, затем добавьте персонажей и привяжите папки галерей.</p>
+          </div>
+          <form method="post" class="stack-form compact-title-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-success" type="submit">Создать</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="catalog-tools">
+        <form class="catalog-search" method="get">
+          <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Поиск тайтла">
+          <select class="form-select" name="kind">
+            <option value="">Все типы</option>
+            {% for value, label in title_kinds %}
+              <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-success" type="submit">Найти</button>
+        </form>
+      </section>
+
+      <section class="title-grid">
+        {% for title in titles %}
+          <a class="title-card" href="{{ title.get_absolute_url }}">
+            <span class="title-poster">
+              {% if title.poster_path %}
+                <img src="/media/{{ title.poster_path }}" alt="" loading="lazy">
+              {% else %}
+                <span class="poster-placeholder">{{ title.get_kind_display }}</span>
+              {% endif %}
+              <span class="title-kind overlay-kind">{{ title.get_kind_display }}</span>
+            </span>
+            <span class="title-card-body">
+              <strong>{{ title.name }}</strong>
+              {% if title.original_name %}
+                <small>{{ title.original_name }}</small>
+              {% endif %}
+              <span class="title-meta">
+                <span>{{ title.characters.count }} персонажей</span>
+                {% if title.gallery_folder %}<span>Галерея</span>{% endif %}
+              </span>
+            </span>
+          </a>
+        {% empty %}
+          <div class="empty-panel">Пока нет тайтлов.</div>
+        {% endfor %}
+      </section>
+    </main>
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  </body>
+</html>

@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ character.name }} — {{ character.title.name }}</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body>
+    <main class="catalog-shell">
+      <nav class="detail-nav">
+        <a href="{{ character.title.get_absolute_url }}">← {{ character.title.name }}</a>
+        <a href="{% url 'photos:media_library' %}">Медиатека</a>
+      </nav>
+
+      <section class="character-detail-grid">
+        <aside class="character-profile">
+          <div class="character-large-portrait">
+            {% if character.portrait_path %}
+              <img src="/media/{{ character.portrait_path }}" alt="">
+            {% else %}
+              <span>{{ character.name|slice:":1" }}</span>
+            {% endif %}
+          </div>
+          <span class="title-kind">{{ character.get_gender_display }}</span>
+          <h1>{{ character.name }}</h1>
+          {% if character.role %}<p>{{ character.role }}</p>{% endif %}
+          {% if character.gallery_folder %}
+            <a class="btn btn-success w-100" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Открыть галерею</a>
+          {% else %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="create_gallery">
+              <button class="btn btn-success w-100" type="submit">Создать галерею</button>
+            </form>
+          {% endif %}
+        </aside>
+
+        <section class="character-editor">
+          <h2>Информация персонажа</h2>
+          <form method="post" class="stack-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="form-actions">
+              <button class="btn btn-success" type="submit">Сохранить</button>
+              {% if character.gallery_folder %}
+                <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Перейти к папке</a>
+              {% endif %}
+            </div>
+          </form>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

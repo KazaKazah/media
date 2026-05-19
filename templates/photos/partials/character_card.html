@@ -1,0 +1,14 @@
+<a class="character-card" href="{{ character.get_absolute_url }}">
+  <span class="character-portrait">
+    {% if character.portrait_path %}
+      <img src="/media/{{ character.portrait_path }}" alt="">
+    {% else %}
+      <span>{{ character.name|slice:":1" }}</span>
+    {% endif %}
+  </span>
+  <span>
+    <strong>{{ character.name }}</strong>
+    {% if character.role %}<small>{{ character.role }}</small>{% endif %}
+    {% if character.race %}<small>{{ character.race }}</small>{% endif %}
+  </span>
+</a>
