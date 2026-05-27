@@ -2,9 +2,15 @@ import json
 import mimetypes
 import os
 import shutil
+import socket
 import tempfile
+from html.parser import HTMLParser
+from ipaddress import ip_address
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote, urljoin, urlparse
+from urllib.request import Request, urlopen
 
 import fcntl
 
@@ -15,6 +21,11 @@ from django.core.exceptions import SuspiciousFileOperation
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".heic", ".heif"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+IMPORT_USER_AGENT = "DropAndTag/1.0 media importer"
+IMPORT_MAX_IMAGES = 60
+IMPORT_MAX_GALLERIES = 30
+IMPORT_MAX_BYTES = 25 * 1024 * 1024
+IMPORT_HTML_MAX_BYTES = 4 * 1024 * 1024
 
 
 def media_root() -> Path:
@@ -38,6 +49,13 @@ def tags_file() -> Path:
 
 def covers_file() -> Path:
     target = data_dir() / "covers.json"
+    if not target.exists():
+        target.write_text("{}\n", encoding="utf-8")
+    return target
+
+
+def imports_file() -> Path:
+    target = data_dir() / "imports.json"
     if not target.exists():
         target.write_text("{}\n", encoding="utf-8")
     return target
@@ -163,6 +181,10 @@ def update_covers(updater) -> dict:
     return update_json_file(covers_file(), updater)
 
 
+def update_imports(updater) -> dict:
+    return update_json_file(imports_file(), updater)
+
+
 def is_media_file(path: Path) -> bool:
     return path.suffix.lower() in MEDIA_EXTENSIONS
 
@@ -267,6 +289,89 @@ def list_folder(relative_path: str = "", offset: int = 0, limit: int | None = No
     }
 
 
+def matches_media_query(entry: dict, query: str) -> bool:
+    haystack = [
+        entry.get("name", ""),
+        entry.get("path", ""),
+        " ".join(entry.get("tags", [])),
+    ]
+    return query in " ".join(haystack).casefold()
+
+
+def search_media(query: str, limit: int = 240) -> dict:
+    clean_query = str(query or "").strip()
+    if not clean_query:
+        return list_folder("")
+
+    query_folded = clean_query.casefold()
+    limit = bounded_int(limit, 240, minimum=1, maximum=500)
+    folder_tags = read_tags()
+    folder_covers = read_covers()
+    folders = []
+    files = []
+    root = media_root()
+
+    for current_root, dirnames, filenames in os.walk(root):
+        current_path = Path(current_root)
+        dirnames[:] = sorted(
+            [dirname for dirname in dirnames if not dirname.startswith(".")],
+            key=str.casefold,
+        )
+
+        for dirname in dirnames:
+            child = current_path / dirname
+            child_rel = child.relative_to(root).as_posix()
+            folder_entry = {
+                "name": dirname,
+                "path": child_rel,
+                "type": "folder",
+                "cover": folder_covers.get(child_rel, ""),
+                "tags": [],
+            }
+            if matches_media_query(folder_entry, query_folded):
+                folders.append(folder_entry)
+
+        for filename in filenames:
+            if filename.startswith("."):
+                continue
+            child = current_path / filename
+            if not is_media_file(child):
+                continue
+            child_rel = child.relative_to(root).as_posix()
+            try:
+                stat = child.stat()
+            except OSError:
+                continue
+            file_entry = {
+                "name": filename,
+                "path": child_rel,
+                "type": media_kind(child),
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+                "tags": folder_tags.get(child_rel, []),
+            }
+            if matches_media_query(file_entry, query_folded):
+                files.append(file_entry)
+
+        if len(folders) + len(files) >= limit:
+            break
+
+    folders.sort(key=lambda item: item["path"].casefold())
+    files.sort(key=lambda item: item["modified"], reverse=True)
+    return {
+        "path": "",
+        "query": clean_query,
+        "folders": folders[:limit],
+        "files": files[:limit],
+        "fileCount": len(files),
+        "folderCount": len(folders),
+        "offset": 0,
+        "nextOffset": len(files[:limit]),
+        "hasMore": False,
+        "limited": len(folders) + len(files) >= limit,
+    }
+
+
 def path_is_inside_folder(file_path: str, folder_path: str) -> bool:
     if not folder_path:
         return True
@@ -308,6 +413,287 @@ def sanitize_file_name(name: str, original_suffix: str = "") -> str:
     if Path(candidate).suffix.lower() not in MEDIA_EXTENSIONS:
         raise ValueError("File extension is not supported")
     return candidate
+
+
+class ImageSourceParser(HTMLParser):
+    def __init__(self, base_url: str):
+        super().__init__()
+        self.base_url = base_url
+        self.urls = []
+
+    def add_url(self, value: str | None):
+        if not value:
+            return
+        value = value.strip()
+        if not value or value.startswith("data:"):
+            return
+        self.urls.append(urljoin(self.base_url, value))
+
+    def add_srcset(self, value: str | None):
+        if not value:
+            return
+        for candidate in value.split(","):
+            self.add_url(candidate.strip().split(" ")[0])
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in {"img", "source"}:
+            self.add_url(attrs.get("src"))
+            self.add_url(attrs.get("data-src"))
+            self.add_url(attrs.get("data-original"))
+            self.add_srcset(attrs.get("srcset"))
+            self.add_srcset(attrs.get("data-srcset"))
+        if tag == "a":
+            self.add_url(attrs.get("href"))
+        if tag == "meta" and attrs.get("property") in {"og:image", "twitter:image"}:
+            self.add_url(attrs.get("content"))
+
+
+class LinkParser(HTMLParser):
+    def __init__(self, base_url: str):
+        super().__init__()
+        self.base_url = base_url
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "a":
+            return
+        attrs = dict(attrs)
+        href = attrs.get("href")
+        if not href:
+            return
+        href = href.strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:", "data:")):
+            return
+        self.links.append(urljoin(self.base_url, href))
+
+
+def assert_public_http_url(url: str) -> str:
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Введите полный http/https адрес")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Не удалось определить домен")
+    try:
+        addresses = {item[4][0] for item in socket.getaddrinfo(host, parsed.port or 443)}
+    except socket.gaierror as exc:
+        raise ValueError("Не удалось найти сайт") from exc
+    for address in addresses:
+        parsed_ip = ip_address(address)
+        if parsed_ip.is_private or parsed_ip.is_loopback or parsed_ip.is_link_local or parsed_ip.is_reserved:
+            raise ValueError("Нельзя импортировать с локальных или внутренних адресов")
+    return parsed.geturl()
+
+
+def fetch_url(url: str, max_bytes: int) -> tuple[bytes, str]:
+    request = Request(url, headers={"User-Agent": IMPORT_USER_AGENT})
+    with urlopen(request, timeout=12) as response:
+        content_type = response.headers.get_content_type()
+        length = response.headers.get("Content-Length")
+        if length and int(length) > max_bytes:
+            raise ValueError("Файл слишком большой")
+        data = response.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError("Файл слишком большой")
+    return data, content_type
+
+
+def image_suffix_from_url(url: str, content_type: str = "") -> str:
+    suffix = Path(unquote(urlparse(url).path)).suffix.lower()
+    if suffix in IMAGE_EXTENSIONS:
+        return suffix
+    guessed = mimetypes.guess_extension(content_type or "")
+    if guessed and guessed.lower() in IMAGE_EXTENSIONS:
+        return guessed.lower()
+    return ".jpg"
+
+
+def image_filename_from_url(url: str, index: int, content_type: str = "") -> str:
+    parsed_name = Path(unquote(urlparse(url).path)).name
+    suffix = image_suffix_from_url(url, content_type)
+    if not parsed_name or not Path(parsed_name).suffix:
+        parsed_name = f"site-image-{index}{suffix}"
+    return sanitize_file_name(parsed_name, suffix)
+
+
+def import_folder_name(page_url: str) -> str:
+    host = urlparse(page_url).hostname or "site"
+    safe_host = "".join(char if char.isalnum() else "-" for char in host).strip("-") or "site"
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return sanitize_folder_name(f"{safe_host}-{timestamp}")
+
+
+def gallery_folder_name(gallery_url: str, index: int) -> str:
+    parsed = urlparse(gallery_url)
+    parts = [part for part in unquote(parsed.path).split("/") if part]
+    raw_name = parts[-1] if parts else parsed.hostname or f"gallery-{index}"
+    if Path(raw_name).suffix:
+        raw_name = Path(raw_name).stem
+    safe_name = "".join(char if char.isalnum() or char in {" ", "-", "_"} else "-" for char in raw_name)
+    safe_name = safe_name.strip(" -_.") or f"gallery-{index}"
+    return sanitize_folder_name(f"{index:02d}-{safe_name}")
+
+
+def same_site_url(base_url: str, candidate_url: str) -> bool:
+    base = urlparse(base_url)
+    candidate = urlparse(candidate_url)
+    return candidate.scheme in {"http", "https"} and candidate.netloc == base.netloc
+
+
+def extract_gallery_links(page_url: str, html: bytes) -> list[str]:
+    parser = LinkParser(page_url)
+    parser.feed(html.decode("utf-8", errors="ignore"))
+    result = []
+    seen = {page_url.rstrip("/")}
+    for candidate in parser.links:
+        parsed = urlparse(candidate)
+        clean = parsed._replace(fragment="", query=parsed.query).geturl()
+        if clean.rstrip("/") in seen:
+            continue
+        if not same_site_url(page_url, clean):
+            continue
+        suffix = Path(unquote(parsed.path)).suffix.lower()
+        if suffix in IMAGE_EXTENSIONS or suffix in VIDEO_EXTENSIONS:
+            continue
+        seen.add(clean.rstrip("/"))
+        result.append(clean)
+    return result
+
+
+def extract_image_urls(page_url: str, html: bytes) -> list[str]:
+    parser = ImageSourceParser(page_url)
+    parser.feed(html.decode("utf-8", errors="ignore"))
+    result = []
+    seen = set()
+    for candidate in parser.urls:
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        if parsed.geturl() in seen:
+            continue
+        suffix = Path(unquote(parsed.path)).suffix.lower()
+        if suffix and suffix not in IMAGE_EXTENSIONS:
+            continue
+        seen.add(parsed.geturl())
+        result.append(parsed.geturl())
+    return result
+
+
+def save_imported_images(target_path: Path, image_urls: list[str], limit: int, skipped: list[dict]) -> list[str]:
+    saved = []
+    for index, image_url in enumerate(image_urls[:limit], start=1):
+        try:
+            assert_public_http_url(image_url)
+            data, content_type = fetch_url(image_url, IMPORT_MAX_BYTES)
+            if not content_type.startswith("image/"):
+                skipped.append({"url": image_url, "reason": "not image"})
+                continue
+            filename = image_filename_from_url(image_url, index, content_type)
+            destination = unique_destination(target_path, filename)
+            destination.write_bytes(data)
+            saved.append(destination.relative_to(media_root()).as_posix())
+        except (OSError, ValueError) as exc:
+            skipped.append({"url": image_url, "reason": str(exc)})
+    return saved
+
+
+def import_registry_key(source_url: str, parent_folder: str) -> str:
+    parsed = urlparse(source_url)
+    return f"{parsed.scheme}://{parsed.netloc}|{parent_folder}"
+
+
+def import_images_from_site(target_folder: str, page_url: str, limit: int = IMPORT_MAX_IMAGES) -> dict:
+    parent_rel, parent_path = resolve_media_path(target_folder)
+    if not parent_path.is_dir():
+        raise ValueError("Target is not a folder")
+    safe_url = assert_public_http_url(page_url)
+    downloads = parent_path / "Загрузки"
+    downloads.mkdir(exist_ok=True)
+    target_path = unique_destination(downloads, import_folder_name(safe_url))
+    target_path.mkdir()
+    target_rel = target_path.relative_to(media_root()).as_posix()
+    limit = bounded_int(limit, IMPORT_MAX_IMAGES, minimum=1, maximum=IMPORT_MAX_IMAGES)
+    page_data, page_type = fetch_url(safe_url, IMPORT_HTML_MAX_BYTES)
+    if page_type.startswith("image/"):
+        image_urls = [safe_url]
+    else:
+        image_urls = extract_image_urls(safe_url, page_data)
+    gallery_links = [] if page_type.startswith("image/") else extract_gallery_links(safe_url, page_data)
+
+    saved = []
+    skipped = []
+    galleries = []
+    skipped_existing = 0
+    imported_now = []
+    registry_key = import_registry_key(safe_url, parent_rel)
+    imported_data = read_json_file(imports_file())
+
+    def already_imported(gallery_url: str) -> bool:
+        return gallery_url in set(imported_data.get(registry_key, []))
+
+    def remember_imports(data):
+        current = set(data.get(registry_key, []))
+        current.update(imported_now)
+        data[registry_key] = sorted(current)
+        return {"remembered": len(imported_now), "total": len(data[registry_key])}
+
+    found_count = len(image_urls)
+    if gallery_links:
+        found_count = 0
+        for gallery_index, gallery_url in enumerate(gallery_links[:IMPORT_MAX_GALLERIES], start=1):
+            try:
+                assert_public_http_url(gallery_url)
+                if already_imported(gallery_url):
+                    skipped_existing += 1
+                    continue
+                gallery_data, gallery_type = fetch_url(gallery_url, IMPORT_HTML_MAX_BYTES)
+                if gallery_type.startswith("image/"):
+                    gallery_images = [gallery_url]
+                else:
+                    gallery_images = extract_image_urls(gallery_url, gallery_data)
+                if not gallery_images:
+                    skipped.append({"url": gallery_url, "reason": "no images"})
+                    continue
+                found_count += len(gallery_images)
+                gallery_path = unique_destination(target_path, gallery_folder_name(gallery_url, gallery_index))
+                gallery_path.mkdir()
+                gallery_saved = save_imported_images(gallery_path, gallery_images, limit, skipped)
+                saved.extend(gallery_saved)
+                galleries.append({
+                    "url": gallery_url,
+                    "folder": gallery_path.relative_to(media_root()).as_posix(),
+                    "found": len(gallery_images),
+                    "saved": gallery_saved,
+                })
+                if gallery_saved:
+                    imported_now.append(gallery_url)
+            except (OSError, ValueError) as exc:
+                skipped.append({"url": gallery_url, "reason": str(exc)})
+    else:
+        if already_imported(safe_url):
+            skipped_existing = 1
+        else:
+            saved = save_imported_images(target_path, image_urls, limit, skipped)
+            if saved:
+                imported_now.append(safe_url)
+
+    if imported_now:
+        update_imports(remember_imports)
+
+    return {
+        "folder": target_rel,
+        "parentFolder": parent_rel,
+        "source": safe_url,
+        "found": found_count,
+        "galleryCount": len(galleries),
+        "galleryLinksFound": len(gallery_links),
+        "skippedExisting": skipped_existing,
+        "galleries": galleries,
+        "saved": saved,
+        "skipped": skipped,
+        "limit": limit,
+    }
 
 
 def create_folder(parent: str, name: str) -> dict:

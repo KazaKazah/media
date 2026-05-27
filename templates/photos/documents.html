@@ -1,0 +1,75 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Документы - Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body class="documents-page">
+    <main class="documents-shell">
+      <header class="documents-header">
+        <div class="catalog-hero-copy">
+          <div class="brand-mark">DT</div>
+          <div>
+            <h1>Документы</h1>
+            <p>Загрузите текстовый файл и читайте его как страницу.</p>
+          </div>
+        </div>
+        <nav class="catalog-nav">
+          <a class="btn btn-outline-success" href="{% url 'photos:todo' %}">To-Do List</a>
+          <a class="btn btn-outline-success" href="{% url 'photos:index' %}">Тайтлы</a>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-secondary" type="submit">Выйти</button>
+          </form>
+        </nav>
+      </header>
+
+      <section class="document-layout">
+        <aside class="document-upload-panel">
+          <h2>Новый документ</h2>
+          <p>Поддерживаются <strong>FB2</strong>, <strong>DOCX</strong>, текстовые <strong>PDF</strong>, <strong>EPUB</strong>, <strong>ODT</strong>, TXT, MD, HTML, XML, CSV, JSON и LOG до 20 МБ.</p>
+          <p class="document-format-note">Старые файлы Word .doc сохраните как .docx. PDF-сканы без текстового слоя не распознаются.</p>
+          <form class="stack-form" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-success w-100" type="submit">Загрузить и открыть</button>
+          </form>
+        </aside>
+
+        <section class="document-list-panel">
+          <div class="document-list-head">
+            <div>
+              <h2>Моя библиотека</h2>
+              <p>{{ documents|length }} документов</p>
+            </div>
+            <form method="get">
+              <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Поиск в документах">
+            </form>
+          </div>
+          <div class="document-list">
+            {% for document in documents %}
+              <article class="document-card">
+                <a href="{{ document.get_absolute_url }}">
+                  <strong>{{ document.title }}</strong>
+                  <small>{{ document.original_filename }}</small>
+                  <span>{{ document.content|truncatechars:135 }}</span>
+                  <time>{{ document.updated_at|date:"d.m.Y H:i" }}</time>
+                </a>
+                <form method="post" action="{% url 'photos:document_delete' document.pk %}" onsubmit="return confirm('Удалить документ «{{ document.title|escapejs }}»?');">
+                  {% csrf_token %}
+                  <button type="submit" title="Удалить">×</button>
+                </form>
+              </article>
+            {% empty %}
+              <div class="document-empty">Документов пока нет. Загрузите первый текстовый файл.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

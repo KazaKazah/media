@@ -12,33 +12,58 @@
     <main class="catalog-shell">
       <header class="catalog-header catalog-hero">
         <div class="catalog-hero-copy">
-          <div class="brand-mark mb-3">DT</div>
-          <h1>Тайтлы</h1>
-          <p>Аниме, манга, персонажи и привязанные медиа-галереи.</p>
+          <div class="brand-mark">DT</div>
+          <div>
+            <h1>Тайтлы</h1>
+            <p>Аниме, манга, игры, кино, книги и привязанные медиа-галереи.</p>
+          </div>
+        </div>
+        <div class="catalog-summary">
+          <strong>{{ titles|length }}</strong>
+          <span>в каталоге</span>
         </div>
         <nav class="catalog-nav">
-          <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#createTitlePanel" aria-expanded="false" aria-controls="createTitlePanel">Добавить тайтл</button>
-          <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}">Медиатека</a>
-          <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button class="btn btn-outline-secondary" type="submit">Выйти</button>
-          </form>
+          <a class="btn btn-outline-success" href="{% url 'photos:todo' %}">To-Do List</a>
+          {% if request.user.is_authenticated %}
+            <a class="btn btn-outline-success" href="{% url 'photos:documents' %}">Документы</a>
+          {% endif %}
+          {% if can_manage %}
+            <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#createTitlePanel" aria-expanded="false" aria-controls="createTitlePanel">Добавить</button>
+            <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}">Медиатека</a>
+          {% endif %}
+          {% if request.user.is_authenticated %}
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button class="btn btn-outline-secondary" type="submit">Выйти</button>
+            </form>
+          {% else %}
+            <a class="btn btn-outline-success" href="{% url 'login' %}">Войти</a>
+          {% endif %}
         </nav>
       </header>
 
-      <section class="collapse" id="createTitlePanel">
-        <div class="catalog-form-panel title-create-panel">
-          <div>
-            <h2>Новая карточка</h2>
-            <p>Создайте тайтл, затем добавьте персонажей и привяжите папки галерей.</p>
-          </div>
-          <form method="post" class="stack-form compact-title-form">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button class="btn btn-success" type="submit">Создать</button>
-          </form>
+      <section class="catalog-intro">
+        <div>
+          <h2>Каталог коллекции</h2>
+          <p>Все категории тайтлов и их медиа-галереи в одной коллекции.</p>
         </div>
       </section>
+
+      {% if can_manage %}
+        <section class="collapse" id="createTitlePanel">
+          <div class="catalog-form-panel title-create-panel">
+            <div>
+              <h2>Новая карточка</h2>
+              <p>Создайте тайтл, затем добавьте персонажей и привяжите папки галерей.</p>
+            </div>
+            <form method="post" class="stack-form compact-title-form">
+              {% csrf_token %}
+              {{ form.as_p }}
+              <button class="btn btn-success" type="submit">Создать</button>
+            </form>
+          </div>
+        </section>
+      {% endif %}
 
       <section class="catalog-tools">
         <form class="catalog-search" method="get">
@@ -55,26 +80,41 @@
 
       <section class="title-grid">
         {% for title in titles %}
-          <a class="title-card" href="{{ title.get_absolute_url }}">
-            <span class="title-poster">
-              {% if title.poster_path %}
-                <img src="/media/{{ title.poster_path }}" alt="" loading="lazy">
-              {% else %}
-                <span class="poster-placeholder">{{ title.get_kind_display }}</span>
-              {% endif %}
-              <span class="title-kind overlay-kind">{{ title.get_kind_display }}</span>
-            </span>
-            <span class="title-card-body">
-              <strong>{{ title.name }}</strong>
-              {% if title.original_name %}
-                <small>{{ title.original_name }}</small>
-              {% endif %}
-              <span class="title-meta">
-                <span>{{ title.characters.count }} персонажей</span>
-                {% if title.gallery_folder %}<span>Галерея</span>{% endif %}
+          <article class="title-card">
+            <a class="title-card-link" href="{{ title.get_absolute_url }}">
+              <span class="title-poster{% if title.is_adult %} adult-poster{% endif %}">
+                {% if title.is_adult and not request.user.is_authenticated %}
+                  <span class="adult-poster-mask"><strong>18+</strong><small>Войдите для просмотра</small></span>
+                {% elif title.poster_path %}
+                  <img src="/media/{{ title.poster_path }}" alt="" loading="lazy">
+                {% else %}
+                  <span class="poster-placeholder">{{ title.get_kind_display }}</span>
+                {% endif %}
+                <span class="title-kind overlay-kind">{{ title.get_kind_display }}</span>
+                {% if title.is_adult %}<span class="adult-badge">18+</span>{% endif %}
               </span>
+              <span class="title-card-body">
+                <strong>{{ title.name }}</strong>
+                {% if title.original_name %}
+                  <small>{{ title.original_name }}</small>
+                {% endif %}
+                <span class="title-meta">
+                  <span>{{ title.characters.count }} персонажей</span>
+                  {% if title.gallery_folder %}<span>Галерея</span>{% endif %}
+                </span>
+              </span>
+            </a>
+            <span class="title-card-actions">
+              <a class="title-action title-action-open" href="{{ title.get_absolute_url }}">Открыть</a>
+              {% if can_manage %}
+                <a class="title-action" href="{% url 'photos:title_edit' title.slug %}">Изменить</a>
+                <form method="post" action="{% url 'photos:title_delete' title.slug %}" onsubmit="return confirm('Удалить тайтл «{{ title.name|escapejs }}» и всех его персонажей?');">
+                  {% csrf_token %}
+                  <button class="title-action title-action-danger" type="submit">Удалить</button>
+                </form>
+              {% endif %}
             </span>
-          </a>
+          </article>
         {% empty %}
           <div class="empty-panel">Пока нет тайтлов.</div>
         {% endfor %}

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.urls import reverse
 from django.utils.text import slugify
 
@@ -7,6 +8,10 @@ class Title(models.Model):
     class Kind(models.TextChoices):
         ANIME = "anime", "Аниме"
         MANGA = "manga", "Манга"
+        GAME = "game", "Игры"
+        HENTAI = "hentai", "Хентай"
+        MOVIE = "movie", "Кино"
+        BOOK = "book", "Книги"
         OTHER = "other", "Другое"
 
     name = models.CharField("Название", max_length=220)
@@ -14,6 +19,7 @@ class Title(models.Model):
     kind = models.CharField("Тип", max_length=20, choices=Kind.choices, default=Kind.ANIME)
     original_name = models.CharField("Оригинальное название", max_length=220, blank=True)
     description = models.TextField("Описание", blank=True)
+    is_adult = models.BooleanField("18+", default=False)
     poster_path = models.CharField("Путь к постеру в медиатеке", max_length=500, blank=True)
     gallery_folder = models.CharField("Папка галереи тайтла", max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -26,6 +32,8 @@ class Title(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        if self.kind == self.Kind.HENTAI:
+            self.is_adult = True
         if not self.slug:
             base = slugify(self.name, allow_unicode=True) or "title"
             slug = base
@@ -52,6 +60,13 @@ class Character(models.Model):
     gender = models.CharField("Пол", max_length=20, choices=Gender.choices, default=Gender.FEMALE)
     role = models.CharField("Роль", max_length=120, blank=True)
     race = models.CharField("Раса", max_length=160, blank=True)
+    height = models.CharField("Рост", max_length=80, blank=True)
+    weight = models.CharField("Вес", max_length=80, blank=True)
+    eye_color = models.CharField("Цвет глаз", max_length=120, blank=True)
+    hair_color = models.CharField("Цвет волос", max_length=120, blank=True)
+    bust = models.CharField("Грудь", max_length=80, blank=True)
+    waist = models.CharField("Талия", max_length=80, blank=True)
+    hips = models.CharField("Бёдра", max_length=80, blank=True)
     body = models.TextField("Характеристики тела", blank=True)
     features = models.TextField("Особенности", blank=True)
     abilities = models.TextField("Способности", blank=True)
@@ -84,3 +99,73 @@ class Character(models.Model):
             "photos:character_detail",
             kwargs={"title_slug": self.title.slug, "character_slug": self.slug},
         )
+
+
+class TodoProject(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="todo_projects")
+    name = models.CharField("Название", max_length=120)
+    color = models.CharField("Цвет", max_length=24, default="#1f7a6d")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = [("owner", "name")]
+
+    def __str__(self):
+        return self.name
+
+
+class TodoItem(models.Model):
+    class Kind(models.TextChoices):
+        TASK = "task", "Задача"
+        REMINDER = "reminder", "Напоминание"
+        NOTE = "note", "Заметка"
+        RECORD = "record", "Запись"
+
+    class Priority(models.TextChoices):
+        LOW = "low", "Низкий"
+        MEDIUM = "medium", "Средний"
+        HIGH = "high", "Высокий"
+        URGENT = "urgent", "Срочно"
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="todo_items")
+    project = models.ForeignKey(TodoProject, on_delete=models.SET_NULL, null=True, blank=True, related_name="items")
+    kind = models.CharField("Тип", max_length=20, choices=Kind.choices, default=Kind.TASK)
+    priority = models.CharField("Приоритет", max_length=20, choices=Priority.choices, default=Priority.MEDIUM)
+    title = models.CharField("Заголовок", max_length=220)
+    body = models.TextField("Текст", blank=True)
+    tags = models.CharField("Метки", max_length=240, blank=True)
+    due_at = models.DateTimeField("Дата и время", null=True, blank=True)
+    is_done = models.BooleanField("Выполнено", default=False)
+    is_pinned = models.BooleanField("Закреплено", default=False)
+    completed_at = models.DateTimeField("Завершено", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["is_done", "-is_pinned", "due_at", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def tag_list(self):
+        return [tag.strip() for tag in self.tags.split(",") if tag.strip()]
+
+
+class TextDocument(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="text_documents")
+    title = models.CharField("Название", max_length=220)
+    original_filename = models.CharField("Имя файла", max_length=255)
+    content = models.TextField("Текст")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse("photos:document_detail", kwargs={"pk": self.pk})

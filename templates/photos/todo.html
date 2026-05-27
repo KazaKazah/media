@@ -1,0 +1,370 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>To-Do List - Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+  </head>
+  <body class="todo-page">
+    <div class="todo-shell">
+      <aside class="todo-sidebar">
+        <div class="todo-user">
+          <div class="brand-mark">DT</div>
+          <div class="min-w-0">
+            <strong>{{ request.user.username }}</strong>
+            <span>личное пространство</span>
+          </div>
+        </div>
+
+        <button class="todo-add-button" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-expanded="true" aria-controls="quickAdd">+ Новая запись</button>
+
+        <nav class="todo-nav" aria-label="Разделы задач">
+          <a class="{% if view == 'today' and not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}?view=today">
+            <span>Сегодня</span><strong>{{ counts.today }}</strong>
+          </a>
+          <a class="{% if view == 'inbox' and not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}?view=inbox">
+            <span>Все активные</span><strong>{{ counts.inbox }}</strong>
+          </a>
+          <a class="todo-danger-link {% if view == 'overdue' %}active{% endif %}" href="{% url 'photos:todo' %}?view=overdue">
+            <span>Просрочено</span><strong>{{ counts.overdue }}</strong>
+          </a>
+          <a class="{% if view == 'upcoming' %}active{% endif %}" href="{% url 'photos:todo' %}?view=upcoming">
+            <span>Предстоящие</span><strong>{{ counts.upcoming }}</strong>
+          </a>
+          <a class="{% if view == 'reminders' %}active{% endif %}" href="{% url 'photos:todo' %}?view=reminders">
+            <span>Напоминания</span><strong>{{ counts.reminders }}</strong>
+          </a>
+          <a class="{% if view == 'notes' %}active{% endif %}" href="{% url 'photos:todo' %}?view=notes">
+            <span>Заметки</span><strong>{{ counts.notes }}</strong>
+          </a>
+          <a class="{% if view == 'records' %}active{% endif %}" href="{% url 'photos:todo' %}?view=records">
+            <span>Записи и данные</span><strong>{{ counts.records }}</strong>
+          </a>
+          <a class="{% if view == 'done' %}active{% endif %}" href="{% url 'photos:todo' %}?view=done">
+            <span>Выполнено</span><strong>{{ counts.done }}</strong>
+          </a>
+        </nav>
+
+        <div class="todo-sidebar-section">
+          <h2>КАТЕГОРИИ</h2>
+          <div class="todo-project-list">
+            {% for project in projects %}
+              <a class="{% if selected_project == project.id|stringformat:'s' %}active{% endif %}" href="{% url 'photos:todo' %}?view={% if view == 'notes' %}notes{% else %}inbox{% endif %}&project={{ project.id }}">
+                <span class="todo-project-dot" style="--project-color: {{ project.color }}"></span>
+                <span>{{ project.name }}</span>
+                <strong>{% if view == "notes" %}{{ project.note_count }}{% else %}{{ project.active_count }}{% endif %}</strong>
+              </a>
+            {% empty %}
+              <p>Категории появятся здесь.</p>
+            {% endfor %}
+          </div>
+          <form class="todo-project-form" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_project">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input class="form-control" name="name" placeholder="Новая категория" maxlength="120">
+            <button type="submit" aria-label="Создать категорию">+</button>
+          </form>
+        </div>
+
+        <div class="todo-sidebar-actions">
+          <a class="btn btn-outline-success w-100" href="{% url 'photos:documents' %}">Документы</a>
+          {% if can_manage %}
+            <a class="btn btn-outline-success w-100" href="{% url 'photos:index' %}">Тайтлы</a>
+          {% endif %}
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-secondary w-100" type="submit">Выйти</button>
+          </form>
+        </div>
+      </aside>
+
+      <main class="todo-workspace">
+        <header class="todo-header">
+          <div>
+            <div class="text-uppercase small text-secondary">To-Do List</div>
+            <h1>
+              {% if view == "overdue" %}Просрочено
+              {% elif view == "upcoming" %}Предстоящие
+              {% elif view == "reminders" %}Напоминания
+              {% elif view == "notes" and selected_project_object %}{{ selected_project_object.name }}
+              {% elif view == "notes" and uncategorized_notes %}Без категории
+              {% elif view == "notes" %}Категории заметок
+              {% elif view == "records" %}Записи и данные
+              {% elif view == "done" %}Выполнено
+              {% elif selected_project_object %}{{ selected_project_object.name }}
+              {% elif view == "inbox" %}Все активные
+              {% else %}Сегодня{% endif %}
+            </h1>
+          </div>
+          <form class="todo-search" method="get">
+            <input type="hidden" name="view" value="{{ view }}">
+            {% if selected_project %}<input type="hidden" name="project" value="{{ selected_project }}">{% endif %}
+            {% if uncategorized_notes %}<input type="hidden" name="category" value="unassigned">{% endif %}
+            {% if priority %}<input type="hidden" name="priority" value="{{ priority }}">{% endif %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Поиск по задачам и заметкам">
+          </form>
+        </header>
+
+        <section class="todo-dashboard" aria-label="Сводка задач">
+          <a href="{% url 'photos:todo' %}?view=inbox" class="todo-stat">
+            <strong>{{ counts.inbox }}</strong><span>активных</span>
+          </a>
+          <a href="{% url 'photos:todo' %}?view=overdue" class="todo-stat todo-stat-danger">
+            <strong>{{ counts.overdue }}</strong><span>просрочено</span>
+          </a>
+          <a href="{% url 'photos:todo' %}?view=done" class="todo-stat">
+            <strong>{{ counts.done }}</strong><span>завершено</span>
+          </a>
+          <div class="todo-progress">
+            <div><strong>{{ completion_percent }}%</strong><span>готово</span></div>
+            <div class="todo-progress-track"><span style="width: {{ completion_percent }}%"></span></div>
+          </div>
+        </section>
+
+        <section class="collapse show todo-quick-add" id="quickAdd">
+          <div class="todo-panel-heading">
+            <strong>Быстро добавить</strong>
+            <span>Установите срок и приоритет, чтобы ничего не затерялось.</span>
+          </div>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_item">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <div class="todo-add-grid">
+              <input class="form-control todo-title-input" name="title" placeholder="Что нужно сделать или сохранить?" maxlength="220" required>
+              <select class="form-select" name="kind" aria-label="Тип записи">
+                {% for value, label in kind_choices %}<option value="{{ value }}" {% if view == "notes" and value == "note" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+              <select class="form-select" name="priority" aria-label="Приоритет">
+                {% for value, label in priority_choices %}<option value="{{ value }}" {% if value == "medium" %}selected{% endif %}>{{ label }} приоритет</option>{% endfor %}
+              </select>
+              <select class="form-select" name="project" aria-label="Категория">
+                <option value="">Без категории</option>
+                {% for project in projects %}
+                  <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:'s' %}selected{% endif %}>{{ project.name }}</option>
+                {% endfor %}
+              </select>
+              <input class="form-control" type="datetime-local" name="due_at" aria-label="Срок">
+              <input class="form-control" name="tags" placeholder="Метки через запятую" maxlength="240">
+              <label class="todo-pin">
+                <input type="checkbox" name="is_pinned" value="1">
+                Закрепить
+              </label>
+              <textarea class="form-control" name="body" rows="2" placeholder="Описание, ссылки или дополнительная информация"></textarea>
+              <button class="btn btn-success" type="submit">Добавить</button>
+            </div>
+          </form>
+        </section>
+
+        <form class="todo-filters" method="get">
+          <input type="hidden" name="view" value="{{ view }}">
+          {% if selected_project %}<input type="hidden" name="project" value="{{ selected_project }}">{% endif %}
+          {% if uncategorized_notes %}<input type="hidden" name="category" value="unassigned">{% endif %}
+          {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+          <label>
+            Приоритет
+            <select class="form-select" name="priority">
+              <option value="">Все</option>
+              {% for value, label in priority_choices %}
+                <option value="{{ value }}" {% if priority == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Сортировка
+            <select class="form-select" name="sort">
+              <option value="due" {% if sort == "due" %}selected{% endif %}>По сроку</option>
+              <option value="priority" {% if sort == "priority" %}selected{% endif %}>По приоритету</option>
+              <option value="created" {% if sort == "created" %}selected{% endif %}>Сначала новые</option>
+            </select>
+          </label>
+          <button class="btn btn-outline-success" type="submit">Применить</button>
+          {% if priority or query %}<a class="btn btn-link" href="{% url 'photos:todo' %}?view={{ view }}{% if selected_project %}&project={{ selected_project }}{% elif uncategorized_notes %}&category=unassigned{% endif %}">Сбросить</a>{% endif %}
+          {% if view == "done" and counts.done %}
+            <button class="btn btn-outline-danger ms-auto" type="submit" form="clearCompleted">Очистить выполненные</button>
+          {% endif %}
+        </form>
+        {% if view == "done" and counts.done %}
+          <form id="clearCompleted" method="post" onsubmit="return confirm('Удалить все выполненные записи?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="clear_completed">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          </form>
+        {% endif %}
+
+        {% if view == "notes" %}
+          {% if not selected_project and not uncategorized_notes %}
+            <section class="todo-note-categories" aria-label="Категории заметок">
+              {% for category in note_categories %}
+                <a class="todo-note-category" href="{% url 'photos:todo' %}?view=notes{% if category.project %}&project={{ category.project.id }}{% else %}&category=unassigned{% endif %}{% if priority %}&priority={{ priority }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}&sort={{ sort }}">
+                  {% if category.project %}
+                    <span class="todo-project-dot" style="--project-color: {{ category.project.color }}"></span>
+                    <strong>{{ category.project.name }}</strong>
+                  {% else %}
+                    <span class="todo-project-dot todo-project-dot-muted"></span>
+                    <strong>Без категории</strong>
+                  {% endif %}
+                  <span>{{ category.count }} заметок</span>
+                </a>
+              {% endfor %}
+            </section>
+          {% else %}
+            <div class="todo-note-back">
+              <a href="{% url 'photos:todo' %}?view=notes">← Все категории</a>
+              <span>Выберите заметку, чтобы открыть подробности.</span>
+            </div>
+            <div class="todo-note-browser">
+              <section class="todo-note-titles" aria-label="Заметки категории">
+                {% for item in note_items %}
+                  <a class="{% if selected_note.id == item.id %}active{% endif %}" href="{% url 'photos:todo' %}?view=notes{% if selected_project %}&project={{ selected_project }}{% else %}&category=unassigned{% endif %}&note={{ item.id }}{% if priority %}&priority={{ priority }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}&sort={{ sort }}">
+                    {{ item.title }}
+                  </a>
+                {% empty %}
+                  <div class="todo-empty">
+                    <h2>Заметок нет</h2>
+                    <p>Добавьте заметку в эту категорию.</p>
+                  </div>
+                {% endfor %}
+              </section>
+              {% if selected_note %}
+                <article class="todo-note-detail">
+                  <div class="todo-note-detail-heading">
+                    <h2>{{ selected_note.title }}</h2>
+                    {% if selected_note.is_pinned %}<span>Закреплено</span>{% endif %}
+                  </div>
+                  {% if selected_note.body %}<p>{{ selected_note.body|linebreaksbr }}</p>{% else %}<p class="text-secondary">Подробная информация пока не добавлена.</p>{% endif %}
+                  <div class="todo-meta">
+                    {% if selected_note.due_at %}<span>{{ selected_note.due_at|date:"d.m.Y H:i" }}</span>{% endif %}
+                    {% for tag in selected_note.tag_list %}<span>#{{ tag }}</span>{% endfor %}
+                  </div>
+                  <details class="todo-edit">
+                    <summary>Изменить заметку</summary>
+                    <form method="post" class="todo-edit-grid">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="update_item">
+                      <input type="hidden" name="item" value="{{ selected_note.id }}">
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <input class="form-control todo-edit-title" name="title" value="{{ selected_note.title }}" maxlength="220" required>
+                      <input type="hidden" name="kind" value="note">
+                      <select class="form-select" name="priority">
+                        {% for value, label in priority_choices %}<option value="{{ value }}" {% if selected_note.priority == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                      </select>
+                      <select class="form-select" name="project">
+                        <option value="">Без категории</option>
+                        {% for project in projects %}<option value="{{ project.id }}" {% if selected_note.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>{% endfor %}
+                      </select>
+                      <input class="form-control" type="datetime-local" name="due_at" value="{{ selected_note.due_at|date:'Y-m-d\\TH:i' }}">
+                      <input class="form-control" name="tags" value="{{ selected_note.tags }}" maxlength="240" placeholder="Метки">
+                      <label class="todo-pin"><input type="checkbox" name="is_pinned" value="1" {% if selected_note.is_pinned %}checked{% endif %}> Закрепить</label>
+                      <textarea class="form-control todo-edit-body" name="body" rows="5" placeholder="Подробная информация">{{ selected_note.body }}</textarea>
+                      <button class="btn btn-success" type="submit">Сохранить изменения</button>
+                    </form>
+                  </details>
+                  <div class="todo-note-actions">
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="toggle_pin">
+                      <input type="hidden" name="item" value="{{ selected_note.id }}">
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button class="btn btn-outline-success" type="submit">{% if selected_note.is_pinned %}Открепить{% else %}Закрепить{% endif %}</button>
+                    </form>
+                    <form method="post" onsubmit="return confirm('Удалить заметку «{{ selected_note.title|escapejs }}»?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete_item">
+                      <input type="hidden" name="item" value="{{ selected_note.id }}">
+                      <input type="hidden" name="next" value="{% url 'photos:todo' %}?view=notes{% if selected_project %}&project={{ selected_project }}{% else %}&category=unassigned{% endif %}">
+                      <button class="btn btn-outline-danger" type="submit">Удалить</button>
+                    </form>
+                  </div>
+                </article>
+              {% elif note_items %}
+                <div class="todo-note-prompt">Нажмите на название заметки слева.</div>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% else %}
+        <section class="todo-list">
+          {% for item in items %}
+            <article class="todo-item priority-{{ item.priority }} {% if item.is_done %}done{% endif %} {% if item.due_at and not item.is_done and item.due_at < now %}overdue{% endif %}">
+              <form method="post" class="todo-check-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="toggle_item">
+                <input type="hidden" name="item" value="{{ item.id }}">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="todo-check" type="submit" aria-label="Переключить выполнение"></button>
+              </form>
+              <div class="todo-item-body">
+                <div class="todo-item-line">
+                  <h2>{{ item.title }}</h2>
+                  <span class="todo-kind">{{ item.get_kind_display }}</span>
+                  <span class="todo-priority">{{ item.get_priority_display }}</span>
+                </div>
+                {% if item.body %}<p>{{ item.body|linebreaksbr }}</p>{% endif %}
+                <div class="todo-meta">
+                  {% if item.project %}<span>{{ item.project.name }}</span>{% endif %}
+                  {% if item.due_at %}<span class="todo-deadline">{{ item.due_at|date:"d.m.Y H:i" }}</span>{% endif %}
+                  {% for tag in item.tag_list %}<span>#{{ tag }}</span>{% endfor %}
+                  {% if item.is_pinned %}<span>Закреплено</span>{% endif %}
+                  {% if item.completed_at %}<span>Готово {{ item.completed_at|date:"d.m.Y" }}</span>{% endif %}
+                </div>
+                <details class="todo-edit">
+                  <summary>Изменить запись</summary>
+                  <form method="post" class="todo-edit-grid">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_item">
+                    <input type="hidden" name="item" value="{{ item.id }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input class="form-control todo-edit-title" name="title" value="{{ item.title }}" maxlength="220" required>
+                    <select class="form-select" name="kind">
+                      {% for value, label in kind_choices %}<option value="{{ value }}" {% if item.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <select class="form-select" name="priority">
+                      {% for value, label in priority_choices %}<option value="{{ value }}" {% if item.priority == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <select class="form-select" name="project">
+                      <option value="">Без категории</option>
+                      {% for project in projects %}<option value="{{ project.id }}" {% if item.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>{% endfor %}
+                    </select>
+                    <input class="form-control" type="datetime-local" name="due_at" value="{{ item.due_at|date:'Y-m-d\\TH:i' }}">
+                    <input class="form-control" name="tags" value="{{ item.tags }}" maxlength="240" placeholder="Метки">
+                    <label class="todo-pin"><input type="checkbox" name="is_pinned" value="1" {% if item.is_pinned %}checked{% endif %}> Закрепить</label>
+                    <textarea class="form-control todo-edit-body" name="body" rows="2" placeholder="Описание">{{ item.body }}</textarea>
+                    <button class="btn btn-success" type="submit">Сохранить изменения</button>
+                  </form>
+                </details>
+              </div>
+              <div class="todo-item-actions">
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="toggle_pin">
+                  <input type="hidden" name="item" value="{{ item.id }}">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="todo-action {% if item.is_pinned %}active{% endif %}" type="submit" title="Закрепить">★</button>
+                </form>
+                <form method="post" onsubmit="return confirm('Удалить запись «{{ item.title|escapejs }}»?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete_item">
+                  <input type="hidden" name="item" value="{{ item.id }}">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="todo-delete" type="submit" title="Удалить">×</button>
+                </form>
+              </div>
+            </article>
+          {% empty %}
+            <div class="todo-empty">
+              <h2>Ничего не найдено</h2>
+              <p>Создайте новую запись или измените фильтры и поиск.</p>
+            </div>
+          {% endfor %}
+        </section>
+        {% endif %}
+      </main>
+    </div>
+    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  </body>
+</html>

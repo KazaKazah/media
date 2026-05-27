@@ -19,7 +19,13 @@
           </div>
         </div>
         <div class="px-3 pb-3 d-grid gap-2">
-          <button class="btn btn-outline-light w-100" id="refreshTree" type="button">Обновить дерево</button>
+          <a class="btn btn-outline-success w-100" href="{% url 'photos:todo' %}">To-Do List</a>
+          <a class="btn btn-outline-success w-100" href="{% url 'photos:documents' %}">Документы</a>
+          <a class="btn btn-outline-success w-100" href="{% url 'photos:index' %}">К тайтлам</a>
+          <div class="tree-tools">
+            <button class="btn btn-outline-light" id="refreshTree" type="button">Обновить</button>
+            <button class="btn btn-outline-light" id="collapseTree" type="button">Свернуть</button>
+          </div>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
             <button class="btn btn-outline-warning w-100" type="submit">Выйти</button>
@@ -36,7 +42,7 @@
           </div>
           <div class="toolbar">
             <button class="btn btn-success" id="createFolder" type="button">Создать папку</button>
-            <input class="form-control" id="search" type="search" placeholder="Поиск по имени или тегу">
+            <input class="form-control" id="search" type="search" placeholder="Поиск по всей медиатеке">
           </div>
         </header>
 
@@ -45,6 +51,36 @@
             <strong>Перетащите сюда фото, видео или элемент из приложения</strong>
             <div class="text-secondary">Файлы с компьютера загрузятся в текущую папку, элементы из приложения будут перенесены.</div>
           </div>
+          <div class="drop-zone-actions">
+            <button class="btn btn-success" id="uploadSelectFiles" type="button">Выбрать фото</button>
+            <input id="uploadFileInput" type="file" accept="image/*,video/*" multiple hidden>
+          </div>
+        </section>
+
+        <section class="upload-preview-panel rounded-3 p-3 mb-3 d-none" id="uploadPreviewPanel">
+          <div class="upload-preview-head">
+            <div class="min-w-0">
+              <h3 class="h6 mb-1">Предпросмотр загрузки</h3>
+              <div class="small text-secondary" id="uploadSummary"></div>
+              <div class="small text-secondary">Папка: <span id="uploadTargetLabel">/</span></div>
+            </div>
+            <div class="upload-preview-actions">
+              <button class="btn btn-outline-secondary" id="uploadClear" type="button">Очистить</button>
+              <button class="btn btn-success" id="uploadConfirm" type="button">Загрузить</button>
+            </div>
+          </div>
+          <div class="upload-preview-grid mt-3" id="uploadPreviewGrid"></div>
+        </section>
+
+        <section class="site-import rounded-3 p-3 mb-3">
+          <form class="site-import-form" id="siteImportForm">
+            <div class="min-w-0">
+              <label class="form-label mb-1" for="siteUrl">Импорт фото с сайта</label>
+              <input class="form-control" id="siteUrl" type="url" placeholder="https://example.com/gallery" autocomplete="off" required>
+            </div>
+            <button class="btn btn-success" type="submit">Скачать фото</button>
+          </form>
+          <div class="small text-secondary mt-2" id="siteImportStatus">Будет создана папка в «Загрузки». Старые уже скачанные карточки будут пропущены.</div>
         </section>
 
         <section class="content-grid">
@@ -90,6 +126,6 @@
     </div>
 
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    <script src="{% static 'photos/app.js' %}"></script>
+    <script src="{% static 'photos/app.js' %}?v=media-search-1"></script>
   </body>
 </html>

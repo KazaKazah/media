@@ -12,7 +12,11 @@
     <main class="catalog-shell">
       <nav class="detail-nav">
         <a href="{{ character.title.get_absolute_url }}">← {{ character.title.name }}</a>
-        <a href="{% url 'photos:media_library' %}">Медиатека</a>
+        {% if can_manage %}
+          <a href="{% url 'photos:media_library' %}">Медиатека</a>
+        {% elif not request.user.is_authenticated %}
+          <a href="{% url 'login' %}?next={{ request.path }}">Войти для полного доступа</a>
+        {% endif %}
       </nav>
 
       <section class="character-detail-grid">
@@ -23,33 +27,68 @@
             {% else %}
               <span>{{ character.name|slice:":1" }}</span>
             {% endif %}
+            {% if can_manage %}
+              <form class="cover-upload-panel" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload_portrait">
+                <label for="characterCover">Портрет</label>
+                <input id="characterCover" name="cover" type="file" accept="image/*" required>
+                <button class="btn btn-sm btn-light" type="submit">Загрузить</button>
+              </form>
+            {% endif %}
           </div>
           <span class="title-kind">{{ character.get_gender_display }}</span>
           <h1>{{ character.name }}</h1>
           {% if character.role %}<p>{{ character.role }}</p>{% endif %}
-          {% if character.gallery_folder %}
-            <a class="btn btn-success w-100" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Открыть галерею</a>
-          {% else %}
-            <form method="post">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="create_gallery">
-              <button class="btn btn-success w-100" type="submit">Создать галерею</button>
-            </form>
+          {% if character.height or character.weight or character.eye_color or character.hair_color or character.bust or character.waist or character.hips %}
+            <dl class="character-facts">
+              {% if character.height %}<div><dt>Рост</dt><dd>{{ character.height }}</dd></div>{% endif %}
+              {% if character.weight %}<div><dt>Вес</dt><dd>{{ character.weight }}</dd></div>{% endif %}
+              {% if character.eye_color %}<div><dt>Глаза</dt><dd>{{ character.eye_color }}</dd></div>{% endif %}
+              {% if character.hair_color %}<div><dt>Волосы</dt><dd>{{ character.hair_color }}</dd></div>{% endif %}
+              {% if character.bust %}<div><dt>Грудь</dt><dd>{{ character.bust }}</dd></div>{% endif %}
+              {% if character.waist %}<div><dt>Талия</dt><dd>{{ character.waist }}</dd></div>{% endif %}
+              {% if character.hips %}<div><dt>Бёдра</dt><dd>{{ character.hips }}</dd></div>{% endif %}
+            </dl>
+          {% endif %}
+          {% if can_manage %}
+            {% if character.gallery_folder %}
+              <a class="btn btn-success w-100" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Открыть галерею</a>
+            {% else %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_gallery">
+                <button class="btn btn-success w-100" type="submit">Создать галерею</button>
+              </form>
+            {% endif %}
           {% endif %}
         </aside>
 
         <section class="character-editor">
           <h2>Информация персонажа</h2>
-          <form method="post" class="stack-form">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <div class="form-actions">
-              <button class="btn btn-success" type="submit">Сохранить</button>
-              {% if character.gallery_folder %}
-                <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Перейти к папке</a>
+          {% if can_manage %}
+            <form method="post" class="stack-form">
+              {% csrf_token %}
+              {{ form.as_p }}
+              <div class="form-actions">
+                <button class="btn btn-success" type="submit">Сохранить</button>
+                {% if character.gallery_folder %}
+                  <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Перейти к папке</a>
+                {% endif %}
+              </div>
+            </form>
+          {% else %}
+            <dl class="character-readonly">
+              {% if character.race %}<div><dt>Раса</dt><dd>{{ character.race }}</dd></div>{% endif %}
+              {% if character.body %}<div><dt>Тело</dt><dd>{{ character.body }}</dd></div>{% endif %}
+              {% if character.features %}<div><dt>Особенности</dt><dd>{{ character.features }}</dd></div>{% endif %}
+              {% if character.abilities %}<div><dt>Способности</dt><dd>{{ character.abilities }}</dd></div>{% endif %}
+              {% if character.notes %}<div><dt>Заметки</dt><dd>{{ character.notes }}</dd></div>{% endif %}
+              {% if not character.race and not character.body and not character.features and not character.abilities and not character.notes %}
+                <p class="text-secondary">Дополнительная информация пока не заполнена.</p>
               {% endif %}
-            </div>
-          </form>
+            </dl>
+          {% endif %}
         </section>
       </section>
     </main>

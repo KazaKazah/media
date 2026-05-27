@@ -1,14 +1,22 @@
-<a class="character-card" href="{{ character.get_absolute_url }}">
-  <span class="character-portrait">
-    {% if character.portrait_path %}
-      <img src="/media/{{ character.portrait_path }}" alt="">
-    {% else %}
-      <span>{{ character.name|slice:":1" }}</span>
-    {% endif %}
-  </span>
-  <span>
-    <strong>{{ character.name }}</strong>
-    {% if character.role %}<small>{{ character.role }}</small>{% endif %}
-    {% if character.race %}<small>{{ character.race }}</small>{% endif %}
-  </span>
-</a>
+<article class="character-card" data-character-search="{{ character.name }} {{ character.role }} {{ character.race }} {{ character.features }} {{ character.abilities }} {{ character.notes }}">
+  <a class="character-card-link" href="{{ character.get_absolute_url }}">
+    <span class="character-portrait">
+      {% if character.portrait_path %}
+        <img src="/media/{{ character.portrait_path }}" alt="">
+      {% else %}
+        <span>{{ character.name|slice:":1" }}</span>
+      {% endif %}
+    </span>
+    <span class="character-card-body">
+      <strong>{{ character.name }}</strong>
+      {% if character.role %}<small>{{ character.role }}</small>{% endif %}
+      {% if character.race %}<small>{{ character.race }}</small>{% endif %}
+    </span>
+  </a>
+  {% if can_manage %}
+    <form method="post" action="{% url 'photos:character_delete' character.title.slug character.slug %}" onsubmit="return confirm('Удалить персонажа «{{ character.name|escapejs }}»?');">
+      {% csrf_token %}
+      <button class="character-delete" type="submit" title="Удалить персонажа">×</button>
+    </form>
+  {% endif %}
+</article>

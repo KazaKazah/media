@@ -1,17 +1,32 @@
+const TREE_STORAGE_KEY = "dropandtag.expandedTree";
+
+function loadExpandedTree() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(TREE_STORAGE_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
 const state = {
   currentPath: "",
   folders: [],
   files: [],
   tree: [],
+  expandedFolders: loadExpandedTree(),
   selected: null,
   selectedType: "",
   filter: "",
+  searchMode: false,
+  searchRequestId: 0,
   fileCount: 0,
   nextOffset: 0,
   hasMore: false,
   loadingMore: false,
   viewerIndex: -1,
   viewerFiles: [],
+  pendingUploadItems: [],
+  uploading: false,
 };
 
 const elements = {
@@ -23,8 +38,20 @@ const elements = {
   inspector: document.querySelector("#inspector"),
   search: document.querySelector("#search"),
   refreshTree: document.querySelector("#refreshTree"),
+  collapseTree: document.querySelector("#collapseTree"),
   createFolder: document.querySelector("#createFolder"),
+  siteImportForm: document.querySelector("#siteImportForm"),
+  siteUrl: document.querySelector("#siteUrl"),
+  siteImportStatus: document.querySelector("#siteImportStatus"),
   dropZone: document.querySelector("#dropZone"),
+  uploadSelectFiles: document.querySelector("#uploadSelectFiles"),
+  uploadFileInput: document.querySelector("#uploadFileInput"),
+  uploadPreviewPanel: document.querySelector("#uploadPreviewPanel"),
+  uploadPreviewGrid: document.querySelector("#uploadPreviewGrid"),
+  uploadSummary: document.querySelector("#uploadSummary"),
+  uploadTargetLabel: document.querySelector("#uploadTargetLabel"),
+  uploadConfirm: document.querySelector("#uploadConfirm"),
+  uploadClear: document.querySelector("#uploadClear"),
   viewerModal: document.querySelector("#viewerModal"),
   viewerTitle: document.querySelector("#viewerTitle"),
   viewerPath: document.querySelector("#viewerPath"),
@@ -105,6 +132,61 @@ function readDragPayload(event) {
   }
 }
 
+function isUploadableMedia(file) {
+  return file.type.startsWith("image/") || file.type.startsWith("video/");
+}
+
+function clearPendingUploadFiles() {
+  state.pendingUploadItems.forEach((item) => URL.revokeObjectURL(item.url));
+  state.pendingUploadItems = [];
+  renderUploadPreview();
+}
+
+function prepareUploadFiles(files) {
+  const mediaFiles = [...files].filter(isUploadableMedia);
+  if (!mediaFiles.length) {
+    window.alert("Выберите фото или видео файл.");
+    return;
+  }
+
+  clearPendingUploadFiles();
+  state.pendingUploadItems = mediaFiles.map((file) => ({
+    file,
+    url: URL.createObjectURL(file),
+    type: file.type.startsWith("image/") ? "image" : "video",
+  }));
+  renderUploadPreview();
+}
+
+function renderUploadPreview() {
+  const hasItems = state.pendingUploadItems.length > 0;
+  elements.uploadPreviewPanel.classList.toggle("d-none", !hasItems);
+  elements.uploadTargetLabel.textContent = formatPath(state.currentPath);
+  elements.uploadConfirm.disabled = !hasItems || state.uploading;
+  elements.uploadClear.disabled = state.uploading;
+  elements.uploadConfirm.textContent = state.uploading ? "Загружаю..." : "Загрузить";
+  elements.uploadPreviewGrid.replaceChildren();
+
+  if (!hasItems) {
+    elements.uploadSummary.textContent = "";
+    return;
+  }
+
+  elements.uploadSummary.textContent = `Выбрано файлов: ${state.pendingUploadItems.length}`;
+  state.pendingUploadItems.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "upload-preview-card";
+    const preview = item.type === "image"
+      ? `<img src="${escapeAttr(item.url)}" alt="">`
+      : `<video src="${escapeAttr(item.url)}" muted preload="metadata"></video>`;
+    card.innerHTML = `
+      <span class="upload-preview-thumb">${preview}</span>
+      <span class="upload-preview-name" title="${escapeAttr(item.file.name)}">${escapeHtml(item.file.name)}</span>
+    `;
+    elements.uploadPreviewGrid.appendChild(card);
+  });
+}
+
 function installDropTarget(element, targetPath) {
   element.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -134,17 +216,68 @@ async function askCreateFolder(parentPath) {
   }
 }
 
+function persistExpandedTree() {
+  localStorage.setItem(TREE_STORAGE_KEY, JSON.stringify([...state.expandedFolders]));
+}
+
+function hasChildren(folder) {
+  return Boolean(folder.children?.length);
+}
+
+function isFolderExpanded(path) {
+  return path === "" || state.expandedFolders.has(path);
+}
+
+function toggleTreeFolder(path) {
+  if (state.expandedFolders.has(path)) {
+    state.expandedFolders.delete(path);
+  } else {
+    state.expandedFolders.add(path);
+  }
+  persistExpandedTree();
+  renderTree();
+}
+
+function expandPath(path, includeSelf = true) {
+  const parts = path.split("/").filter(Boolean);
+  const limit = includeSelf ? parts.length : parts.length - 1;
+  for (let index = 1; index <= limit; index += 1) {
+    state.expandedFolders.add(parts.slice(0, index).join("/"));
+  }
+  persistExpandedTree();
+}
+
+function collapseTreeToCurrentPath() {
+  state.expandedFolders.clear();
+  expandPath(state.currentPath, false);
+  renderTree();
+}
+
 function renderTreeNode(folder, depth = 0) {
   const row = document.createElement("div");
   row.className = "tree-row";
+  row.style.setProperty("--tree-depth", depth);
+  const expanded = isFolderExpanded(folder.path);
+  const expandable = hasChildren(folder);
 
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.path = folder.path;
-  button.className = folder.path === state.currentPath ? "active" : "";
+  button.className = `tree-folder ${folder.path === state.currentPath ? "active" : ""}`;
   button.draggable = true;
-  button.innerHTML = `<span class="indent">${"&nbsp;".repeat(depth * 2)}</span><span>+</span><span class="text-truncate">${escapeHtml(folder.name)}</span>`;
-  button.addEventListener("click", () => loadFolder(folder.path));
+  button.innerHTML = `
+    <span class="tree-toggle ${expanded ? "expanded" : ""}" title="${expandable ? (expanded ? "Свернуть" : "Развернуть") : "Нет вложенных папок"}">${expandable ? "›" : ""}</span>
+    <span class="tree-folder-icon" aria-hidden="true"></span>
+    <span class="tree-folder-name" title="${escapeAttr(folder.path)}">${escapeHtml(folder.name)}</span>
+    ${expandable ? `<span class="tree-count">${folder.children.length}</span>` : ""}
+  `;
+  button.addEventListener("click", (event) => {
+    if (event.target.closest(".tree-toggle") && expandable) {
+      toggleTreeFolder(folder.path);
+      return;
+    }
+    loadFolder(folder.path);
+  });
   button.addEventListener("dragstart", (event) => {
     event.dataTransfer.setData("application/json", dragPayload("folder", folder.path));
     event.dataTransfer.effectAllowed = "move";
@@ -163,20 +296,28 @@ function renderTreeNode(folder, depth = 0) {
 
   row.append(button, addButton);
   elements.tree.appendChild(row);
-  folder.children.forEach((child) => renderTreeNode(child, depth + 1));
+  if (expanded) {
+    folder.children.forEach((child) => renderTreeNode(child, depth + 1));
+  }
 }
 
 function renderTree() {
   elements.tree.replaceChildren();
 
   const row = document.createElement("div");
-  row.className = "tree-row";
+  row.className = "tree-row tree-row-root";
+  row.style.setProperty("--tree-depth", 0);
 
   const root = document.createElement("button");
   root.type = "button";
   root.dataset.path = "";
-  root.className = state.currentPath === "" ? "active" : "";
-  root.innerHTML = "<span>/</span><span>Все фото</span>";
+  root.className = `tree-folder ${state.currentPath === "" ? "active" : ""}`;
+  root.innerHTML = `
+    <span class="tree-toggle expanded">›</span>
+    <span class="tree-root-icon" aria-hidden="true">/</span>
+    <span class="tree-folder-name">Все фото</span>
+    <span class="tree-count">${state.tree.length}</span>
+  `;
   root.addEventListener("click", () => loadFolder(""));
   installDropTarget(root, "");
 
@@ -194,7 +335,8 @@ function renderTree() {
 
 function renderFolders() {
   elements.folderRow.replaceChildren();
-  state.folders.forEach((folder) => {
+  const folders = state.folders.filter(matchesEntryFilter);
+  folders.forEach((folder) => {
     const card = document.createElement("article");
     card.className = `folder-card ${state.selectedType === "folder" && state.selected?.path === folder.path ? "active" : ""}`;
     card.draggable = true;
@@ -235,9 +377,7 @@ function renderFolders() {
 }
 
 function matchesFilter(file) {
-  const query = state.filter.trim().toLowerCase();
-  if (!query) return true;
-  return file.name.toLowerCase().includes(query) || file.tags.some((tag) => tag.includes(query));
+  return matchesEntryFilter(file);
 }
 
 function visibleFiles() {
@@ -320,6 +460,15 @@ function allFolderOptions(folders, result = [{ name: "/", path: "" }], depth = 0
 
 function isInsideFolder(path, folderPath) {
   return path === folderPath || path.startsWith(`${folderPath}/`);
+}
+
+function matchesEntryFilter(entry) {
+  const query = state.filter.trim().toLowerCase();
+  if (!query || state.searchMode) return true;
+  const tags = entry.tags || [];
+  return entry.name.toLowerCase().includes(query)
+    || entry.path.toLowerCase().includes(query)
+    || tags.some((tag) => tag.toLowerCase().includes(query));
 }
 
 function destinationOptions(selectedPath = "", selectedType = "") {
@@ -584,10 +733,10 @@ async function moveSelected(source, targetFolder, type = "file") {
 }
 
 async function uploadFiles(files, targetFolder) {
-  const mediaFiles = [...files].filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
+  const mediaFiles = [...files].filter(isUploadableMedia);
   if (!mediaFiles.length) {
-    window.alert("Перетащите фото или видео файл.");
-    return;
+    window.alert("Выберите фото или видео файл.");
+    return false;
   }
 
   try {
@@ -599,8 +748,53 @@ async function uploadFiles(files, targetFolder) {
     await loadFolder(targetFolder, false);
     const skipped = result.skipped?.length ? ` Пропущено: ${result.skipped.length}.` : "";
     renderInspector(`Загружено: ${result.saved.length}.${skipped}`);
+    return true;
   } catch (error) {
     window.alert(error.message);
+    return false;
+  }
+}
+
+async function uploadPendingFiles() {
+  if (!state.pendingUploadItems.length || state.uploading) return;
+  state.uploading = true;
+  renderUploadPreview();
+  try {
+    const uploaded = await uploadFiles(state.pendingUploadItems.map((item) => item.file), state.currentPath);
+    if (uploaded) clearPendingUploadFiles();
+  } finally {
+    state.uploading = false;
+    renderUploadPreview();
+  }
+}
+
+async function importSiteImages(event) {
+  event.preventDefault();
+  const url = elements.siteUrl.value.trim();
+  if (!url) return;
+  const button = elements.siteImportForm.querySelector("button");
+  button.disabled = true;
+  elements.siteImportStatus.textContent = "Ищу и скачиваю изображения...";
+  try {
+    const result = await api("/api/import-site/", {
+      method: "POST",
+      body: JSON.stringify({
+        targetFolder: state.currentPath,
+        url,
+      }),
+    });
+    await loadTree();
+    await loadFolder(result.folder, false);
+    const skipped = result.skipped?.length ? ` Пропущено: ${result.skipped.length}.` : "";
+    const old = result.skippedExisting ? ` Уже были скачаны: ${result.skippedExisting}.` : "";
+    const galleries = result.galleryCount ? ` Галерей: ${result.galleryCount}.` : "";
+    elements.siteImportStatus.textContent = `Создана папка ${formatPath(result.folder)}.${galleries} Найдено фото: ${result.found}. Скачано: ${result.saved.length}.${old}${skipped}`;
+    renderInspector(`Импортировано с сайта: ${result.saved.length}`);
+  } catch (error) {
+    elements.siteImportStatus.textContent = error.message;
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -618,17 +812,61 @@ function applyFolderPayload(payload, append = false) {
   state.nextOffset = payload.nextOffset || state.files.length;
   state.hasMore = Boolean(payload.hasMore);
   elements.currentPath.textContent = formatPath(state.currentPath);
+  renderUploadPreview();
 }
 
 async function loadFolder(folderPath = "", updateTree = true) {
+  state.searchMode = false;
   const payload = await api(`/api/folder/?path=${encodeURIComponent(folderPath)}`);
   applyFolderPayload(payload);
+  expandPath(state.currentPath);
   state.selected = null;
   state.selectedType = "";
   renderFolders();
   renderGallery();
   renderInspector();
   if (updateTree) renderTree();
+}
+
+function applySearchPayload(payload) {
+  state.searchMode = true;
+  state.folders = payload.folders || [];
+  state.files = payload.files || [];
+  state.fileCount = payload.fileCount || state.files.length;
+  state.nextOffset = state.files.length;
+  state.hasMore = false;
+  state.selected = null;
+  state.selectedType = "";
+  elements.currentPath.textContent = `Поиск: ${payload.query || state.filter.trim()}`;
+  renderFolders();
+  renderGallery();
+  renderInspector(
+    `Найдено: папок ${payload.folderCount || state.folders.length}, файлов ${state.fileCount}.`
+  );
+}
+
+async function searchMedia(query) {
+  const requestId = state.searchRequestId + 1;
+  state.searchRequestId = requestId;
+  if (!query) {
+    await loadFolder(state.currentPath, false);
+    return;
+  }
+  try {
+    const payload = await api(`/api/search/?q=${encodeURIComponent(query)}`);
+    if (requestId !== state.searchRequestId) return;
+    applySearchPayload(payload);
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+function debounce(callback, delay = 250) {
+  let timeoutId = 0;
+  return (...args) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => callback(...args), delay);
+  };
 }
 
 async function loadMoreFiles(options = {}) {
@@ -660,9 +898,11 @@ async function boot() {
   await loadFolder(initialPath);
 }
 
+const runMediaSearch = debounce(searchMedia);
+
 elements.search.addEventListener("input", (event) => {
   state.filter = event.target.value;
-  renderGallery();
+  runMediaSearch(state.filter.trim());
 });
 
 elements.refreshTree.addEventListener("click", async () => {
@@ -670,7 +910,16 @@ elements.refreshTree.addEventListener("click", async () => {
   await loadFolder(state.currentPath);
 });
 
+elements.collapseTree.addEventListener("click", collapseTreeToCurrentPath);
 elements.createFolder.addEventListener("click", () => askCreateFolder(state.currentPath));
+elements.siteImportForm.addEventListener("submit", importSiteImages);
+elements.uploadSelectFiles.addEventListener("click", () => elements.uploadFileInput.click());
+elements.uploadFileInput.addEventListener("change", (event) => {
+  prepareUploadFiles(event.target.files);
+  event.target.value = "";
+});
+elements.uploadConfirm.addEventListener("click", uploadPendingFiles);
+elements.uploadClear.addEventListener("click", clearPendingUploadFiles);
 elements.dropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
   elements.dropZone.classList.add("drag-over");
@@ -680,7 +929,7 @@ elements.dropZone.addEventListener("drop", async (event) => {
   event.preventDefault();
   elements.dropZone.classList.remove("drag-over");
   if (event.dataTransfer.files?.length) {
-    await uploadFiles(event.dataTransfer.files, state.currentPath);
+    prepareUploadFiles(event.dataTransfer.files);
     return;
   }
   const payload = readDragPayload(event);
@@ -707,6 +956,8 @@ window.addEventListener("keydown", async (event) => {
     await stepViewer(1);
   }
 });
+
+window.addEventListener("beforeunload", clearPendingUploadFiles);
 
 boot().catch((error) => {
   document.body.innerHTML = `<main class="container py-5"><h1>Ошибка запуска</h1><p>${escapeHtml(error.message)}</p></main>`;

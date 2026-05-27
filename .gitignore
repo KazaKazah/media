@@ -13,10 +13,7 @@ rest-client/
 apps/photo/static/
 some_files/
 
-# django migrations
-**/migrations/**
-!**/migrations
-!**/migrations/__init__.py
+# Django migrations are application source and must be deployed with model changes.
 .DS_Store
 
 
