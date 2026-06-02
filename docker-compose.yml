@@ -6,8 +6,7 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       MEDIA_ROOT: "/media/photos"
       APP_DATA_DIR: "/app/data"
