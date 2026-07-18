@@ -137,7 +137,7 @@ def todo_home(request):
 
     items = TodoItem.objects.filter(owner=request.user).select_related("project")
     all_items = items
-    view = request.GET.get("view", "today")
+    view = request.GET.get("view", "inbox")
     query = request.GET.get("q", "").strip()
     project_id = request.GET.get("project", "")
     uncategorized_notes = view == "notes" and request.GET.get("category") == "unassigned"
@@ -451,7 +451,19 @@ def config(request):
 @admin_required
 def tree(request):
     try:
-        return JsonResponse({"root": str(library.media_root()), "folders": library.list_tree("")})
+        return JsonResponse({"root": str(library.media_root()), "folders": library.list_folder_children("")})
+    except (ValueError, OSError, SuspiciousFileOperation) as error:
+        return json_error(error)
+
+
+@require_GET
+@admin_required
+def tree_children(request):
+    try:
+        return JsonResponse({
+            "path": library.normalize_relative(request.GET.get("path", "")),
+            "folders": library.list_folder_children(request.GET.get("path", "")),
+        })
     except (ValueError, OSError, SuspiciousFileOperation) as error:
         return json_error(error)
 
@@ -593,4 +605,29 @@ def media(request, relative_path):
     response = FileResponse(open(absolute, "rb"), content_type=library.guess_content_type(absolute))
     response["Content-Disposition"] = f'inline; filename="{absolute.name}"'
     response["Cache-Control"] = "private, max-age=3600"
+    return response
+
+
+@require_GET
+def thumbnail(request, size, relative_path):
+    try:
+        clean, absolute = library.resolve_media_path(relative_path)
+    except SuspiciousFileOperation as error:
+        return json_error(error, status=400)
+    is_restricted_poster = Title.objects.filter(is_adult=True, poster_path=clean).exists()
+    if is_restricted_poster and not request.user.is_authenticated:
+        return redirect_to_login(request.get_full_path())
+    if not clean.startswith("Covers/") and not user_can_manage(request.user):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        raise PermissionDenied("Доступ к медиа разрешён только администратору")
+    if not absolute.is_file() or not library.is_image_file(absolute):
+        return JsonResponse({"error": "Image not found"}, status=404)
+    try:
+        target, content_type = library.thumbnail_file(clean, size)
+    except (ValueError, OSError, SuspiciousFileOperation) as error:
+        return json_error(error)
+    response = FileResponse(open(target, "rb"), content_type=content_type)
+    response["Content-Disposition"] = f'inline; filename="{target.name}"'
+    response["Cache-Control"] = "private, max-age=86400"
     return response

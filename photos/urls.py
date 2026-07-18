@@ -27,6 +27,7 @@ urlpatterns = [
     ),
     path("api/config/", views.config, name="config"),
     path("api/tree/", views.tree, name="tree"),
+    path("api/tree-children/", views.tree_children, name="tree_children"),
     path("api/folder/", views.folder, name="folder"),
     path("api/search/", views.search, name="search"),
     path("api/move/", views.move, name="move"),
@@ -37,5 +38,6 @@ urlpatterns = [
     path("api/import-site/", views.import_site, name="import_site"),
     path("api/tags/", views.tags, name="tags"),
     path("api/cover/", views.cover, name="cover"),
+    path("thumb/<str:size>/<path:relative_path>", views.thumbnail, name="thumbnail"),
     path("media/<path:relative_path>", views.media, name="media"),
 ]

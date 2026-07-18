@@ -13,6 +13,7 @@ const state = {
   folders: [],
   files: [],
   tree: [],
+  loadingTreePaths: new Set(),
   expandedFolders: loadExpandedTree(),
   selected: null,
   selectedType: "",
@@ -22,6 +23,7 @@ const state = {
   fileCount: 0,
   nextOffset: 0,
   hasMore: false,
+  currentCover: "",
   loadingMore: false,
   viewerIndex: -1,
   viewerFiles: [],
@@ -61,6 +63,8 @@ const elements = {
   viewerNext: document.querySelector("#viewerNext"),
 };
 
+let loadMoreObserver = null;
+
 function getCookie(name) {
   return document.cookie
     .split(";")
@@ -71,6 +75,10 @@ function getCookie(name) {
 
 function mediaUrl(filePath) {
   return `/media/${filePath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function thumbnailUrl(filePath, size = "thumb") {
+  return `/thumb/${encodeURIComponent(size)}/${filePath.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 async function api(path, options = {}) {
@@ -221,18 +229,44 @@ function persistExpandedTree() {
 }
 
 function hasChildren(folder) {
-  return Boolean(folder.children?.length);
+  return Boolean(folder.childCount || folder.children?.length);
 }
 
 function isFolderExpanded(path) {
   return path === "" || state.expandedFolders.has(path);
 }
 
-function toggleTreeFolder(path) {
+function findTreeFolder(path, folders = state.tree) {
+  for (const folder of folders) {
+    if (folder.path === path) return folder;
+    const child = findTreeFolder(path, folder.children || []);
+    if (child) return child;
+  }
+  return null;
+}
+
+async function ensureTreeChildren(folder) {
+  if (!folder || folder.childrenLoaded || state.loadingTreePaths.has(folder.path)) return;
+  state.loadingTreePaths.add(folder.path);
+  renderTree();
+  try {
+    const payload = await api(`/api/tree-children/?path=${encodeURIComponent(folder.path)}`);
+    folder.children = payload.folders || [];
+    folder.childCount = folder.children.length;
+    folder.childrenLoaded = true;
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    state.loadingTreePaths.delete(folder.path);
+  }
+}
+
+async function toggleTreeFolder(path) {
   if (state.expandedFolders.has(path)) {
     state.expandedFolders.delete(path);
   } else {
     state.expandedFolders.add(path);
+    await ensureTreeChildren(findTreeFolder(path));
   }
   persistExpandedTree();
   renderTree();
@@ -266,14 +300,14 @@ function renderTreeNode(folder, depth = 0) {
   button.className = `tree-folder ${folder.path === state.currentPath ? "active" : ""}`;
   button.draggable = true;
   button.innerHTML = `
-    <span class="tree-toggle ${expanded ? "expanded" : ""}" title="${expandable ? (expanded ? "Свернуть" : "Развернуть") : "Нет вложенных папок"}">${expandable ? "›" : ""}</span>
+    <span class="tree-toggle ${expanded ? "expanded" : ""}" title="${expandable ? (expanded ? "Свернуть" : "Развернуть") : "Нет вложенных папок"}">${state.loadingTreePaths.has(folder.path) ? "…" : (expandable ? "›" : "")}</span>
     <span class="tree-folder-icon" aria-hidden="true"></span>
     <span class="tree-folder-name" title="${escapeAttr(folder.path)}">${escapeHtml(folder.name)}</span>
-    ${expandable ? `<span class="tree-count">${folder.children.length}</span>` : ""}
+    ${expandable ? `<span class="tree-count">${folder.childCount || folder.children?.length || 0}</span>` : ""}
   `;
-  button.addEventListener("click", (event) => {
+  button.addEventListener("click", async (event) => {
     if (event.target.closest(".tree-toggle") && expandable) {
-      toggleTreeFolder(folder.path);
+      await toggleTreeFolder(folder.path);
       return;
     }
     loadFolder(folder.path);
@@ -341,7 +375,7 @@ function renderFolders() {
     card.className = `folder-card ${state.selectedType === "folder" && state.selected?.path === folder.path ? "active" : ""}`;
     card.draggable = true;
     const cover = folder.cover
-      ? `<span class="folder-cover"><img src="${mediaUrl(folder.cover)}" alt=""></span>`
+      ? `<span class="folder-cover"><img src="${thumbnailUrl(folder.cover, "thumb")}" alt="" loading="lazy" decoding="async"></span>`
       : '<span class="folder-icon" aria-hidden="true"></span>';
     card.innerHTML = `
       <button class="folder-open" type="button" title="Открыть папку">
@@ -384,7 +418,57 @@ function visibleFiles() {
   return state.files.filter(matchesFilter);
 }
 
+function createMediaCard(file, { featured = false } = {}) {
+  const card = document.createElement("article");
+  card.className = [
+    "media-card",
+    featured ? "media-card-featured" : "",
+    state.selectedType === "file" && state.selected?.path === file.path ? "active" : "",
+  ].filter(Boolean).join(" ");
+  card.draggable = true;
+  card.addEventListener("dragstart", (event) => {
+    event.dataTransfer.setData("application/json", dragPayload("file", file.path));
+    event.dataTransfer.setData("text/plain", file.path);
+    event.dataTransfer.effectAllowed = "move";
+  });
+
+  const source = mediaUrl(file.path);
+  const displaySource = file.type === "image" ? thumbnailUrl(file.path, featured ? "preview" : "thumb") : source;
+  const thumb = file.type === "image"
+    ? `<img src="${displaySource}" alt="" loading="lazy" decoding="async">`
+    : `<video src="${displaySource}" muted preload="metadata"></video>`;
+  const tags = file.tags.map((tag) => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
+  const badge = featured ? `<span class="cover-badge">Главная обложка</span>` : "";
+  card.innerHTML = `
+    <button class="media-main" type="button" title="Выбрать файл">
+      <span class="thumb">${thumb}</span>
+      <span class="media-body">
+        ${badge}
+        <span class="fw-semibold media-name" title="${escapeAttr(file.name)}">${escapeHtml(file.name)}</span>
+        <span class="tag-list mt-2">${tags}</span>
+      </span>
+    </button>
+    <span class="media-actions">
+      <button class="icon-button media-open" type="button" title="Открыть">↗</button>
+      <button class="icon-button media-rename" type="button" title="Переименовать">✎</button>
+      <button class="icon-button danger media-delete" type="button" title="Удалить">×</button>
+    </span>
+  `;
+  card.querySelector(".media-main").addEventListener("click", () => selectFile(file));
+  card.querySelector(".media-open").addEventListener("click", () => openViewer(file));
+  card.querySelector(".media-rename").addEventListener("click", () => {
+    selectFile(file);
+    renameSelected();
+  });
+  card.querySelector(".media-delete").addEventListener("click", () => {
+    selectFile(file);
+    deleteSelected();
+  });
+  return card;
+}
+
 function renderGallery() {
+  loadMoreObserver?.disconnect();
   elements.gallery.replaceChildren();
   const files = visibleFiles();
   if (!files.length) {
@@ -395,47 +479,16 @@ function renderGallery() {
     return;
   }
 
-  files.forEach((file) => {
-    const card = document.createElement("article");
-    card.className = `media-card ${state.selectedType === "file" && state.selected?.path === file.path ? "active" : ""}`;
-    card.draggable = true;
-    card.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData("application/json", dragPayload("file", file.path));
-      event.dataTransfer.setData("text/plain", file.path);
-      event.dataTransfer.effectAllowed = "move";
-    });
+  const coverFile = state.searchMode ? null : files.find((file) => file.path === state.currentCover);
+  if (coverFile) {
+    elements.gallery.appendChild(createMediaCard(coverFile, { featured: true }));
+  }
 
-    const source = mediaUrl(file.path);
-    const thumb = file.type === "image"
-      ? `<img src="${source}" alt="" loading="lazy" decoding="async">`
-      : `<video src="${source}" muted preload="metadata"></video>`;
-    const tags = file.tags.map((tag) => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("");
-    card.innerHTML = `
-      <button class="media-main" type="button" title="Выбрать файл">
-        <span class="thumb">${thumb}</span>
-        <span class="p-2 media-body">
-          <span class="fw-semibold media-name" title="${escapeAttr(file.name)}">${escapeHtml(file.name)}</span>
-          <span class="tag-list mt-2">${tags}</span>
-        </span>
-      </button>
-      <span class="media-actions">
-        <button class="icon-button media-open" type="button" title="Открыть">↗</button>
-        <button class="icon-button media-rename" type="button" title="Переименовать">✎</button>
-        <button class="icon-button danger media-delete" type="button" title="Удалить">×</button>
-      </span>
-    `;
-    card.querySelector(".media-main").addEventListener("click", () => selectFile(file));
-    card.querySelector(".media-open").addEventListener("click", () => openViewer(file));
-    card.querySelector(".media-rename").addEventListener("click", () => {
-      selectFile(file);
-      renameSelected();
+  files
+    .filter((file) => file.path !== coverFile?.path)
+    .forEach((file) => {
+      elements.gallery.appendChild(createMediaCard(file));
     });
-    card.querySelector(".media-delete").addEventListener("click", () => {
-      selectFile(file);
-      deleteSelected();
-    });
-    elements.gallery.appendChild(card);
-  });
 
   if (state.hasMore) {
     const more = document.createElement("button");
@@ -447,6 +500,12 @@ function renderGallery() {
     more.disabled = state.loadingMore;
     more.addEventListener("click", loadMoreFiles);
     elements.gallery.appendChild(more);
+    if ("IntersectionObserver" in window) {
+      loadMoreObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMoreFiles();
+      }, { rootMargin: "320px" });
+      loadMoreObserver.observe(more);
+    }
   }
 }
 
@@ -495,7 +554,7 @@ function selectFolder(folder) {
 }
 
 function renderViewer(file) {
-  const source = mediaUrl(file.path);
+  const source = file.type === "image" ? thumbnailUrl(file.path, "preview") : mediaUrl(file.path);
   elements.viewerTitle.textContent = file.name;
   elements.viewerPath.textContent = formatPath(file.path);
   elements.viewerCounter.textContent = state.viewerFiles.length
@@ -544,7 +603,7 @@ function renderInspector(status = "") {
 
   const file = state.selected;
   const preview = file.type === "image"
-    ? `<img src="${mediaUrl(file.path)}" alt="">`
+    ? `<img src="${thumbnailUrl(file.path, "preview")}" alt="">`
     : `<video src="${mediaUrl(file.path)}" controls></video>`;
   const options = destinationOptions(file.path, "file");
 
@@ -634,14 +693,11 @@ async function setCurrentFolderCover(file) {
       method: "POST",
       body: JSON.stringify({ folder: state.currentPath, cover: file.path }),
     });
+    state.currentCover = file.path;
     await loadTree();
-    await loadFolder(state.currentPath, false);
-    const refreshed = state.files.find((item) => item.path === file.path);
-    if (refreshed) {
-      state.selected = refreshed;
-      renderGallery();
-      renderInspector("Обложка папки обновлена");
-    }
+    renderTree();
+    renderGallery();
+    renderInspector("Обложка папки обновлена");
   } catch (error) {
     window.alert(error.message);
   }
@@ -811,6 +867,7 @@ function applyFolderPayload(payload, append = false) {
   state.fileCount = payload.fileCount || state.files.length;
   state.nextOffset = payload.nextOffset || state.files.length;
   state.hasMore = Boolean(payload.hasMore);
+  state.currentCover = append ? state.currentCover : (payload.cover || "");
   elements.currentPath.textContent = formatPath(state.currentPath);
   renderUploadPreview();
 }
@@ -830,6 +887,7 @@ async function loadFolder(folderPath = "", updateTree = true) {
 
 function applySearchPayload(payload) {
   state.searchMode = true;
+  state.currentCover = "";
   state.folders = payload.folders || [];
   state.files = payload.files || [];
   state.fileCount = payload.fileCount || state.files.length;

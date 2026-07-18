@@ -1,9 +1,12 @@
 import json
+import hashlib
 import mimetypes
 import os
 import shutil
 import socket
+import sqlite3
 import tempfile
+import time
 from html.parser import HTMLParser
 from ipaddress import ip_address
 from contextlib import contextmanager
@@ -17,6 +20,11 @@ import fcntl
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
 
+try:
+    from PIL import Image, ImageOps, UnidentifiedImageError
+except ImportError:  # pragma: no cover - optional dependency during deploy upgrades
+    Image = ImageOps = UnidentifiedImageError = None
+
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".heic", ".heif"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
@@ -26,6 +34,11 @@ IMPORT_MAX_IMAGES = 60
 IMPORT_MAX_GALLERIES = 30
 IMPORT_MAX_BYTES = 25 * 1024 * 1024
 IMPORT_HTML_MAX_BYTES = 4 * 1024 * 1024
+INDEX_STALE_SECONDS = 60
+THUMBNAIL_SIZES = {
+    "thumb": (720, 900),
+    "preview": (1800, 1800),
+}
 
 
 def media_root() -> Path:
@@ -58,6 +71,16 @@ def imports_file() -> Path:
     target = data_dir() / "imports.json"
     if not target.exists():
         target.write_text("{}\n", encoding="utf-8")
+    return target
+
+
+def index_file() -> Path:
+    return data_dir() / "media_index.sqlite3"
+
+
+def thumbnail_dir() -> Path:
+    target = data_dir() / "thumbs"
+    target.mkdir(parents=True, exist_ok=True)
     return target
 
 
@@ -197,6 +220,18 @@ def media_kind(path: Path) -> str:
     return "image" if path.suffix.lower() in IMAGE_EXTENSIONS else "video"
 
 
+def folder_child_count(path: Path) -> int:
+    try:
+        with os.scandir(path) as entries:
+            return sum(
+                1
+                for entry in entries
+                if not entry.name.startswith(".") and entry.is_dir(follow_symlinks=False)
+            )
+    except OSError:
+        return 0
+
+
 def list_tree(relative_path: str = "", depth: int = 0) -> list[dict]:
     clean, absolute = resolve_media_path(relative_path)
     folders = []
@@ -218,6 +253,31 @@ def list_tree(relative_path: str = "", depth: int = 0) -> list[dict]:
                 "name": entry.name,
                 "path": child_rel,
                 "children": children,
+                "childCount": folder_child_count(child),
+            })
+    return sorted(folders, key=lambda item: item["name"].casefold())
+
+
+def list_folder_children(relative_path: str = "") -> list[dict]:
+    clean, absolute = resolve_media_path(relative_path)
+    folders = []
+    with os.scandir(absolute) as entries:
+        for entry in entries:
+            if entry.name.startswith("."):
+                continue
+            try:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            child = absolute / entry.name
+            child_rel = f"{clean}/{entry.name}" if clean else entry.name
+            folders.append({
+                "name": entry.name,
+                "path": child_rel,
+                "children": [],
+                "childCount": folder_child_count(child),
+                "childrenLoaded": False,
             })
     return sorted(folders, key=lambda item: item["name"].casefold())
 
@@ -275,17 +335,140 @@ def list_folder(relative_path: str = "", offset: int = 0, limit: int | None = No
 
     folders.sort(key=lambda item: item["name"].casefold())
     files.sort(key=lambda item: item["modified"], reverse=True)
+    cover_path = folder_covers.get(clean, "")
+    if cover_path:
+        files.sort(key=lambda item: item["path"] != cover_path)
     total_files = len(files)
     paged_files = files[offset:offset + limit]
     next_offset = offset + len(paged_files)
     return {
         "path": clean,
+        "cover": cover_path,
         "folders": folders,
         "files": paged_files,
         "fileCount": total_files,
         "offset": offset,
         "nextOffset": next_offset,
         "hasMore": next_offset < total_files,
+    }
+
+
+def index_connection() -> sqlite3.Connection:
+    connection = sqlite3.connect(index_file())
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS media_entries (
+            path TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            parent TEXT NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0,
+            modified REAL NOT NULL DEFAULT 0,
+            tags TEXT NOT NULL DEFAULT '',
+            cover TEXT NOT NULL DEFAULT '',
+            search_text TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS media_entries_type_idx ON media_entries(type)")
+    connection.execute("CREATE INDEX IF NOT EXISTS media_entries_modified_idx ON media_entries(modified)")
+    return connection
+
+
+def mark_media_index_stale() -> None:
+    target = index_file()
+    if target.exists():
+        os.utime(target, (0, 0))
+
+
+def media_index_is_stale() -> bool:
+    target = index_file()
+    return not target.exists() or time.time() - target.stat().st_mtime > INDEX_STALE_SECONDS
+
+
+def refresh_media_index(force: bool = False) -> None:
+    if not force and not media_index_is_stale():
+        return
+
+    folder_tags = read_tags()
+    folder_covers = read_covers()
+    root = media_root()
+    rows = []
+
+    for current_root, dirnames, filenames in os.walk(root):
+        current_path = Path(current_root)
+        dirnames[:] = sorted(
+            [dirname for dirname in dirnames if not dirname.startswith(".")],
+            key=str.casefold,
+        )
+        current_rel = "" if current_path == root else current_path.relative_to(root).as_posix()
+
+        for dirname in dirnames:
+            child = current_path / dirname
+            child_rel = child.relative_to(root).as_posix()
+            parent = child.parent.relative_to(root).as_posix() if child.parent != root else ""
+            cover = folder_covers.get(child_rel, "")
+            search_text = " ".join([dirname, child_rel, cover]).casefold()
+            rows.append((child_rel, dirname, "folder", parent, 0, 0, "", cover, search_text))
+
+        for filename in filenames:
+            if filename.startswith("."):
+                continue
+            child = current_path / filename
+            if not is_media_file(child):
+                continue
+            child_rel = child.relative_to(root).as_posix()
+            try:
+                stat = child.stat()
+            except OSError:
+                continue
+            tags = " ".join(folder_tags.get(child_rel, []))
+            search_text = " ".join([filename, child_rel, tags]).casefold()
+            rows.append((
+                child_rel,
+                filename,
+                media_kind(child),
+                current_rel,
+                stat.st_size,
+                stat.st_mtime,
+                tags,
+                "",
+                search_text,
+            ))
+
+    with index_connection() as connection:
+        connection.execute("DELETE FROM media_entries")
+        connection.executemany(
+            """
+            INSERT INTO media_entries (
+                path, name, type, parent, size, modified, tags, cover, search_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        connection.commit()
+
+
+def indexed_file_entry(row: sqlite3.Row) -> dict:
+    return {
+        "name": row["name"],
+        "path": row["path"],
+        "type": row["type"],
+        "size": row["size"],
+        "modified": row["modified"],
+        "tags": [tag for tag in row["tags"].split(" ") if tag],
+    }
+
+
+def indexed_folder_entry(row: sqlite3.Row) -> dict:
+    return {
+        "name": row["name"],
+        "path": row["path"],
+        "type": "folder",
+        "cover": row["cover"],
+        "tags": [],
     }
 
 
@@ -305,70 +488,42 @@ def search_media(query: str, limit: int = 240) -> dict:
 
     query_folded = clean_query.casefold()
     limit = bounded_int(limit, 240, minimum=1, maximum=500)
-    folder_tags = read_tags()
-    folder_covers = read_covers()
-    folders = []
-    files = []
-    root = media_root()
+    refresh_media_index()
+    pattern = f"%{query_folded}%"
+    with index_connection() as connection:
+        connection.row_factory = sqlite3.Row
+        folder_rows = connection.execute(
+            """
+            SELECT * FROM media_entries
+            WHERE type = 'folder' AND search_text LIKE ?
+            ORDER BY path COLLATE NOCASE
+            LIMIT ?
+            """,
+            (pattern, limit),
+        ).fetchall()
+        file_rows = connection.execute(
+            """
+            SELECT * FROM media_entries
+            WHERE type != 'folder' AND search_text LIKE ?
+            ORDER BY modified DESC
+            LIMIT ?
+            """,
+            (pattern, limit),
+        ).fetchall()
 
-    for current_root, dirnames, filenames in os.walk(root):
-        current_path = Path(current_root)
-        dirnames[:] = sorted(
-            [dirname for dirname in dirnames if not dirname.startswith(".")],
-            key=str.casefold,
-        )
-
-        for dirname in dirnames:
-            child = current_path / dirname
-            child_rel = child.relative_to(root).as_posix()
-            folder_entry = {
-                "name": dirname,
-                "path": child_rel,
-                "type": "folder",
-                "cover": folder_covers.get(child_rel, ""),
-                "tags": [],
-            }
-            if matches_media_query(folder_entry, query_folded):
-                folders.append(folder_entry)
-
-        for filename in filenames:
-            if filename.startswith("."):
-                continue
-            child = current_path / filename
-            if not is_media_file(child):
-                continue
-            child_rel = child.relative_to(root).as_posix()
-            try:
-                stat = child.stat()
-            except OSError:
-                continue
-            file_entry = {
-                "name": filename,
-                "path": child_rel,
-                "type": media_kind(child),
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-                "tags": folder_tags.get(child_rel, []),
-            }
-            if matches_media_query(file_entry, query_folded):
-                files.append(file_entry)
-
-        if len(folders) + len(files) >= limit:
-            break
-
-    folders.sort(key=lambda item: item["path"].casefold())
-    files.sort(key=lambda item: item["modified"], reverse=True)
+    folders = [indexed_folder_entry(row) for row in folder_rows]
+    files = [indexed_file_entry(row) for row in file_rows]
     return {
         "path": "",
         "query": clean_query,
-        "folders": folders[:limit],
-        "files": files[:limit],
+        "folders": folders,
+        "files": files,
         "fileCount": len(files),
         "folderCount": len(folders),
         "offset": 0,
-        "nextOffset": len(files[:limit]),
+        "nextOffset": len(files),
         "hasMore": False,
-        "limited": len(folders) + len(files) >= limit,
+        "limited": len(folders) + len(files) >= limit * 2,
     }
 
 
@@ -680,6 +835,8 @@ def import_images_from_site(target_folder: str, page_url: str, limit: int = IMPO
 
     if imported_now:
         update_imports(remember_imports)
+    if saved:
+        mark_media_index_stale()
 
     return {
         "folder": target_rel,
@@ -705,6 +862,7 @@ def create_folder(parent: str, name: str) -> dict:
     if destination.exists():
         raise ValueError("Folder already exists")
     destination.mkdir()
+    mark_media_index_stale()
     return {
         "name": folder_name,
         "path": f"{parent_rel}/{folder_name}" if parent_rel else folder_name,
@@ -733,6 +891,8 @@ def save_uploaded_files(target_folder: str, uploaded_files) -> dict:
                 file.write(chunk)
         saved.append(destination.relative_to(media_root()).as_posix())
 
+    if saved:
+        mark_media_index_stale()
     return {"folder": target_rel, "saved": saved, "skipped": skipped}
 
 
@@ -762,6 +922,7 @@ def move_media_file(source: str, target_folder: str) -> dict:
                 folder_covers[folder_path] = destination_rel
 
     update_covers(move_covers)
+    mark_media_index_stale()
 
     return {"from": source_rel, "to": destination_rel}
 
@@ -819,6 +980,7 @@ def move_folder(source: str, target_folder: str) -> dict:
         folder_covers.update(moved_covers)
 
     update_covers(move_covers)
+    mark_media_index_stale()
 
     return {"from": source_rel, "to": destination_rel}
 
@@ -859,6 +1021,7 @@ def delete_media_file(source: str) -> dict:
         raise ValueError("Source is not a supported media file")
     source_path.unlink()
     cleanup_deleted_metadata(source_rel, "file")
+    mark_media_index_stale()
     return {"deleted": source_rel, "type": "file"}
 
 
@@ -870,6 +1033,7 @@ def delete_folder(source: str) -> dict:
         raise ValueError("Source is not a folder")
     shutil.rmtree(source_path)
     cleanup_deleted_metadata(source_rel, "folder")
+    mark_media_index_stale()
     return {"deleted": source_rel, "type": "folder"}
 
 
@@ -926,6 +1090,7 @@ def rename_media_file(source: str, new_name: str) -> dict:
     source_path.rename(destination)
     destination_rel = destination.relative_to(media_root()).as_posix()
     replace_metadata_path(source_rel, destination_rel, "file")
+    mark_media_index_stale()
     return {"from": source_rel, "to": destination_rel, "name": destination.name, "type": "file"}
 
 
@@ -944,6 +1109,7 @@ def rename_folder(source: str, new_name: str) -> dict:
     source_path.rename(destination)
     destination_rel = destination.relative_to(media_root()).as_posix()
     replace_metadata_path(source_rel, destination_rel, "folder")
+    mark_media_index_stale()
     return {"from": source_rel, "to": destination_rel, "name": destination.name, "type": "folder"}
 
 
@@ -971,6 +1137,7 @@ def set_file_tags(file_path: str, next_tags: list[str]) -> dict:
             folder_tags.pop(clean, None)
 
     update_tags(save_tags)
+    mark_media_index_stale()
     return {"path": clean, "tags": normalized}
 
 
@@ -988,7 +1155,43 @@ def set_folder_cover(folder_path: str, cover_path: str) -> dict:
         folder_covers[folder_rel] = cover_rel
 
     update_covers(save_cover)
+    mark_media_index_stale()
     return {"folder": folder_rel, "cover": cover_rel}
+
+
+def thumbnail_file(relative_path: str, size: str) -> tuple[Path, str]:
+    clean, absolute = resolve_media_path(relative_path)
+    if size not in THUMBNAIL_SIZES:
+        raise ValueError("Unknown thumbnail size")
+    if not absolute.is_file() or not is_image_file(absolute):
+        raise ValueError("Thumbnail source must be an image")
+    if Image is None:
+        return absolute, guess_content_type(absolute)
+
+    stat = absolute.stat()
+    cache_key = hashlib.sha256(f"{size}|{clean}|{stat.st_mtime_ns}|{stat.st_size}".encode("utf-8")).hexdigest()
+    destination = thumbnail_dir() / f"{cache_key}.jpg"
+    if destination.exists():
+        return destination, "image/jpeg"
+
+    try:
+        with Image.open(absolute) as image:
+            image = ImageOps.exif_transpose(image)
+            image.thumbnail(THUMBNAIL_SIZES[size], Image.Resampling.LANCZOS)
+            if image.mode not in {"RGB", "L"}:
+                background = Image.new("RGB", image.size, "#ffffff")
+                if image.mode in {"RGBA", "LA"}:
+                    background.paste(image, mask=image.getchannel("A"))
+                else:
+                    background.paste(image)
+                image = background
+            elif image.mode == "L":
+                image = image.convert("RGB")
+            image.save(destination, "JPEG", quality=84, optimize=True, progressive=True)
+    except (OSError, UnidentifiedImageError):
+        return absolute, guess_content_type(absolute)
+
+    return destination, "image/jpeg"
 
 
 def guess_content_type(path: Path) -> str:

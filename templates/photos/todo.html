@@ -6,67 +6,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>To-Do List - Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=todoist-1">
   </head>
   <body class="todo-page">
     <div class="todo-shell">
       <aside class="todo-sidebar">
         <div class="todo-user">
-          <div class="brand-mark">DT</div>
+          <div class="todo-avatar">{{ request.user.username|slice:":1"|upper }}</div>
           <div class="min-w-0">
             <strong>{{ request.user.username }}</strong>
-            <span>личное пространство</span>
           </div>
+          <span class="todo-user-chevron">⌄</span>
+          <span class="todo-user-tools">♢</span>
         </div>
 
-        <button class="todo-add-button" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-expanded="true" aria-controls="quickAdd">+ Новая запись</button>
+        <button class="todo-add-button" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-expanded="false" aria-controls="quickAdd">
+          <span>+</span> Добавить задачу
+        </button>
 
         <nav class="todo-nav" aria-label="Разделы задач">
-          <a class="{% if view == 'today' and not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}?view=today">
-            <span>Сегодня</span><strong>{{ counts.today }}</strong>
-          </a>
           <a class="{% if view == 'inbox' and not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}?view=inbox">
-            <span>Все активные</span><strong>{{ counts.inbox }}</strong>
+            <span><i>⌂</i> Входящие</span><strong>{{ counts.inbox }}</strong>
           </a>
-          <a class="todo-danger-link {% if view == 'overdue' %}active{% endif %}" href="{% url 'photos:todo' %}?view=overdue">
-            <span>Просрочено</span><strong>{{ counts.overdue }}</strong>
+          <a class="{% if view == 'today' and not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}?view=today">
+            <span><i>07</i> Сегодня</span><strong>{{ counts.today }}</strong>
           </a>
           <a class="{% if view == 'upcoming' %}active{% endif %}" href="{% url 'photos:todo' %}?view=upcoming">
-            <span>Предстоящие</span><strong>{{ counts.upcoming }}</strong>
+            <span><i>□</i> Предстоящие</span><strong>{{ counts.upcoming }}</strong>
           </a>
-          <a class="{% if view == 'reminders' %}active{% endif %}" href="{% url 'photos:todo' %}?view=reminders">
-            <span>Напоминания</span><strong>{{ counts.reminders }}</strong>
-          </a>
-          <a class="{% if view == 'notes' %}active{% endif %}" href="{% url 'photos:todo' %}?view=notes">
-            <span>Заметки</span><strong>{{ counts.notes }}</strong>
+          <a class="{% if priority or query %}active{% endif %}" href="{% url 'photos:todo' %}?view={{ view }}{% if selected_project %}&project={{ selected_project }}{% endif %}">
+            <span><i>⌘</i> Фильтры и метки</span><strong></strong>
           </a>
           <a class="{% if view == 'records' %}active{% endif %}" href="{% url 'photos:todo' %}?view=records">
-            <span>Записи и данные</span><strong>{{ counts.records }}</strong>
+            <span><i>▧</i> Отчеты</span><strong>{{ counts.records }}</strong>
+          </a>
+          <a class="{% if view == 'notes' %}active{% endif %}" href="{% url 'photos:todo' %}?view=notes">
+            <span><i>✎</i> Заметки</span><strong>{{ counts.notes }}</strong>
+          </a>
+          <a class="todo-danger-link {% if view == 'overdue' %}active{% endif %}" href="{% url 'photos:todo' %}?view=overdue">
+            <span><i>!</i> Просрочено</span><strong>{{ counts.overdue }}</strong>
           </a>
           <a class="{% if view == 'done' %}active{% endif %}" href="{% url 'photos:todo' %}?view=done">
-            <span>Выполнено</span><strong>{{ counts.done }}</strong>
+            <span><i>✓</i> Выполнено</span><strong>{{ counts.done }}</strong>
           </a>
         </nav>
 
         <div class="todo-sidebar-section">
-          <h2>КАТЕГОРИИ</h2>
+          <h2>Мои проекты</h2>
           <div class="todo-project-list">
             {% for project in projects %}
               <a class="{% if selected_project == project.id|stringformat:'s' %}active{% endif %}" href="{% url 'photos:todo' %}?view={% if view == 'notes' %}notes{% else %}inbox{% endif %}&project={{ project.id }}">
-                <span class="todo-project-dot" style="--project-color: {{ project.color }}"></span>
+                <span class="todo-project-hash">#</span>
                 <span>{{ project.name }}</span>
                 <strong>{% if view == "notes" %}{{ project.note_count }}{% else %}{{ project.active_count }}{% endif %}</strong>
               </a>
             {% empty %}
-              <p>Категории появятся здесь.</p>
+              <p>Проекты появятся здесь.</p>
             {% endfor %}
           </div>
           <form class="todo-project-form" method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="create_project">
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <input class="form-control" name="name" placeholder="Новая категория" maxlength="120">
-            <button type="submit" aria-label="Создать категорию">+</button>
+            <input class="form-control" name="name" placeholder="Добавить проект" maxlength="120">
+            <button type="submit" aria-label="Создать проект">+</button>
           </form>
         </div>
 
@@ -83,9 +86,13 @@
       </aside>
 
       <main class="todo-workspace">
+        <div class="todo-topbar">
+          <span>▤ Отображение</span>
+          <span>□</span>
+          <span>•••</span>
+        </div>
         <header class="todo-header">
           <div>
-            <div class="text-uppercase small text-secondary">To-Do List</div>
             <h1>
               {% if view == "overdue" %}Просрочено
               {% elif view == "upcoming" %}Предстоящие
@@ -96,7 +103,7 @@
               {% elif view == "records" %}Записи и данные
               {% elif view == "done" %}Выполнено
               {% elif selected_project_object %}{{ selected_project_object.name }}
-              {% elif view == "inbox" %}Все активные
+              {% elif view == "inbox" %}Входящие
               {% else %}Сегодня{% endif %}
             </h1>
           </div>
@@ -126,7 +133,7 @@
           </div>
         </section>
 
-        <section class="collapse show todo-quick-add" id="quickAdd">
+        <section class="collapse todo-quick-add" id="quickAdd">
           <div class="todo-panel-heading">
             <strong>Быстро добавить</strong>
             <span>Установите срок и приоритет, чтобы ничего не затерялось.</span>
@@ -361,6 +368,9 @@
               <p>Создайте новую запись или измените фильтры и поиск.</p>
             </div>
           {% endfor %}
+          <button class="todo-inline-add" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-controls="quickAdd">
+            <span>+</span> Добавить задачу
+          </button>
         </section>
         {% endif %}
       </main>

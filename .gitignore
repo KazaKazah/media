@@ -1,6 +1,8 @@
 .idea/
 .vscode/
 db.sqlite3
+db.sqlite3-shm
+db.sqlite3-wal
 venv/
 media/
 __pycache__
@@ -9,6 +11,10 @@ __pycache__
 local_settings.py
 
 private/
+data/media_index.sqlite3
+data/media_index.sqlite3-shm
+data/media_index.sqlite3-wal
+data/thumbs/
 rest-client/
 apps/photo/static/
 some_files/
