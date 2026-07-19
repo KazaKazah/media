@@ -115,11 +115,128 @@
 
         {% if can_manage %}
           <aside class="catalog-form-panel character-create-panel">
-            <h2>Добавить персонажа</h2>
-            <form method="post" class="stack-form">
+            <div class="character-create-heading">
+              <div>
+                <span class="character-create-eyebrow">Новый профиль</span>
+                <h2>Добавить персонажа</h2>
+                <p>Начните с основного — подробности можно заполнить сразу или позже.</p>
+              </div>
+              <span class="character-form-progress" id="characterFormProgress">0%</span>
+            </div>
+
+            <div class="character-create-preview" aria-live="polite">
+              <span class="character-create-avatar" id="characterPreviewAvatar">
+                <span id="characterPreviewInitial">?</span>
+                <img id="characterPreviewImage" alt="" hidden>
+              </span>
+              <span>
+                <strong id="characterPreviewName">Новый персонаж</strong>
+                <small id="characterPreviewMeta">Укажите имя и роль</small>
+              </span>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" class="character-create-form" id="characterCreateForm" novalidate>
               {% csrf_token %}
-              {{ form.as_p }}
-              <button class="btn btn-success w-100" type="submit">Создать персонажа</button>
+              {% if form.non_field_errors %}
+                <div class="character-form-alert">{{ form.non_field_errors }}</div>
+              {% endif %}
+
+              <section class="character-form-section character-form-primary">
+                <div class="character-field character-field-wide{% if form.name.errors %} has-error{% endif %}">
+                  <label for="{{ form.name.id_for_label }}">{{ form.name.label }} <span>*</span></label>
+                  {{ form.name }}
+                  {{ form.name.errors }}
+                </div>
+                <div class="character-field{% if form.gender.errors %} has-error{% endif %}">
+                  <label for="{{ form.gender.id_for_label }}">{{ form.gender.label }}</label>
+                  {{ form.gender }}
+                  {{ form.gender.errors }}
+                </div>
+                <div class="character-field{% if form.role.errors %} has-error{% endif %}">
+                  <label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>
+                  {{ form.role }}
+                  {{ form.role.errors }}
+                </div>
+                <div class="character-field{% if form.race.errors %} has-error{% endif %}">
+                  <label for="{{ form.race.id_for_label }}">{{ form.race.label }}</label>
+                  {{ form.race }}
+                  {{ form.race.errors }}
+                </div>
+                <div class="character-field character-field-wide{% if form.portrait_upload.errors %} has-error{% endif %}">
+                  <label for="{{ form.portrait_upload.id_for_label }}">{{ form.portrait_upload.label }}</label>
+                  {{ form.portrait_upload }}
+                  <small>{{ form.portrait_upload.help_text }}</small>
+                  {{ form.portrait_upload.errors }}
+                </div>
+              </section>
+
+              <details class="character-form-group"{% if form.height.errors or form.weight.errors or form.eye_color.errors or form.hair_color.errors or form.bust.errors or form.waist.errors or form.hips.errors %} open{% endif %}>
+                <summary>
+                  <span><strong>Внешность и параметры</strong><small>Рост, цвета, пропорции</small></span>
+                  <span class="character-group-status" data-group-status>Не заполнено</span>
+                </summary>
+                <div class="character-form-grid">
+                  {% for field in form %}
+                    {% if field.name == "height" or field.name == "weight" or field.name == "eye_color" or field.name == "hair_color" or field.name == "bust" or field.name == "waist" or field.name == "hips" %}
+                      <div class="character-field{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="character-form-group"{% if form.body.errors or form.features.errors or form.abilities.errors or form.notes.errors %} open{% endif %}>
+                <summary>
+                  <span><strong>Описание персонажа</strong><small>Характер, тело, способности и заметки</small></span>
+                  <span class="character-group-status" data-group-status>Не заполнено</span>
+                </summary>
+                <div class="character-form-grid character-form-textareas">
+                  {% for field in form %}
+                    {% if field.name == "body" or field.name == "features" or field.name == "abilities" or field.name == "notes" %}
+                      <div class="character-field{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        <span class="character-counter" data-counter-for="{{ field.id_for_label }}">0</span>
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="character-form-group character-form-technical"{% if form.portrait_path.errors or form.gallery_folder.errors %} open{% endif %}>
+                <summary>
+                  <span><strong>Медиатека</strong><small>Пути к портрету и галерее</small></span>
+                  <span class="character-group-status" data-group-status>Автоматически</span>
+                </summary>
+                <div class="character-form-grid">
+                  <div class="character-field character-field-wide{% if form.gallery_folder.errors %} has-error{% endif %}">
+                    <label for="{{ form.gallery_folder.id_for_label }}">{{ form.gallery_folder.label }}</label>
+                    {{ form.gallery_folder }}
+                    {{ form.gallery_folder.errors }}
+                  </div>
+                  <div class="character-field character-field-wide{% if form.portrait_path.errors %} has-error{% endif %}">
+                    <label for="{{ form.portrait_path.id_for_label }}">{{ form.portrait_path.label }}</label>
+                    {{ form.portrait_path }}
+                    {{ form.portrait_path.errors }}
+                  </div>
+                  <label class="character-gallery-toggle" for="{{ form.create_gallery.id_for_label }}">
+                    {{ form.create_gallery }}
+                    <span><strong>{{ form.create_gallery.label }}</strong><small>Путь будет создан по имени и полу персонажа</small></span>
+                  </label>
+                </div>
+              </details>
+
+              <div class="character-form-actions">
+                <button class="btn btn-success" type="submit">
+                  <span>Создать персонажа</span>
+                  <small>и открыть его профиль</small>
+                </button>
+                <button class="btn character-draft-clear" id="characterDraftClear" type="button">Очистить</button>
+              </div>
             </form>
           </aside>
         {% endif %}
@@ -143,6 +260,102 @@
           empty.hidden = !query || visibleCount > 0;
         });
       });
+
+      const characterForm = document.querySelector("#characterCreateForm");
+      if (characterForm) {
+        const draftKey = `dropandtag.characterDraft.{{ title.slug|escapejs }}`;
+        const fields = [...characterForm.querySelectorAll("input:not([type=file]):not([type=hidden]), select, textarea")];
+        const nameInput = characterForm.querySelector("#{{ form.name.id_for_label }}");
+        const roleInput = characterForm.querySelector("#{{ form.role.id_for_label }}");
+        const raceInput = characterForm.querySelector("#{{ form.race.id_for_label }}");
+        const portraitInput = characterForm.querySelector("#{{ form.portrait_upload.id_for_label }}");
+        const previewName = document.querySelector("#characterPreviewName");
+        const previewMeta = document.querySelector("#characterPreviewMeta");
+        const previewInitial = document.querySelector("#characterPreviewInitial");
+        const previewImage = document.querySelector("#characterPreviewImage");
+        const progress = document.querySelector("#characterFormProgress");
+        let previewUrl = "";
+
+        const updateCharacterForm = () => {
+          const name = nameInput.value.trim();
+          const meta = [roleInput.value.trim(), raceInput.value.trim()].filter(Boolean).join(" · ");
+          previewName.textContent = name || "Новый персонаж";
+          previewMeta.textContent = meta || "Укажите имя и роль";
+          previewInitial.textContent = name ? name.charAt(0).toUpperCase() : "?";
+
+          const meaningful = fields.filter((field) => field.name !== "create_gallery");
+          const filled = meaningful.filter((field) => field.value.trim()).length;
+          const percentage = Math.round((filled / meaningful.length) * 100);
+          progress.textContent = `${percentage}%`;
+          progress.style.setProperty("--progress", `${percentage * 3.6}deg`);
+
+          characterForm.querySelectorAll(".character-form-group").forEach((group) => {
+            const groupFields = [...group.querySelectorAll("input:not([type=checkbox]), select, textarea")];
+            const groupFilled = groupFields.filter((field) => field.value.trim()).length;
+            const status = group.querySelector("[data-group-status]");
+            if (status) status.textContent = groupFilled ? `${groupFilled} заполнено` : (group.classList.contains("character-form-technical") ? "Автоматически" : "Не заполнено");
+          });
+
+          characterForm.querySelectorAll("[data-counter-for]").forEach((counter) => {
+            const field = document.getElementById(counter.dataset.counterFor);
+            counter.textContent = field?.value.length || 0;
+          });
+        };
+
+        const saveDraft = () => {
+          const payload = {};
+          fields.forEach((field) => {
+            payload[field.name] = field.type === "checkbox" ? field.checked : field.value;
+          });
+          localStorage.setItem(draftKey, JSON.stringify(payload));
+        };
+
+        {% if not form.is_bound %}
+          try {
+            const draft = JSON.parse(localStorage.getItem(draftKey) || "{}");
+            fields.forEach((field) => {
+              if (!(field.name in draft)) return;
+              if (field.type === "checkbox") field.checked = Boolean(draft[field.name]);
+              else field.value = draft[field.name];
+            });
+          } catch {
+            localStorage.removeItem(draftKey);
+          }
+        {% endif %}
+
+        fields.forEach((field) => field.addEventListener("input", () => {
+          updateCharacterForm();
+          saveDraft();
+        }));
+        fields.forEach((field) => field.addEventListener("change", () => {
+          updateCharacterForm();
+          saveDraft();
+        }));
+
+        portraitInput.addEventListener("change", () => {
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          const file = portraitInput.files[0];
+          previewUrl = file ? URL.createObjectURL(file) : "";
+          previewImage.src = previewUrl;
+          previewImage.hidden = !previewUrl;
+          previewInitial.hidden = Boolean(previewUrl);
+        });
+
+        document.querySelector("#characterDraftClear").addEventListener("click", () => {
+          if (!window.confirm("Очистить все поля нового персонажа?")) return;
+          characterForm.reset();
+          localStorage.removeItem(draftKey);
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          previewUrl = "";
+          previewImage.hidden = true;
+          previewInitial.hidden = false;
+          updateCharacterForm();
+          nameInput.focus();
+        });
+
+        characterForm.addEventListener("submit", () => localStorage.removeItem(draftKey));
+        updateCharacterForm();
+      }
     </script>
   </body>
 </html>

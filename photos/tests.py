@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from .models import TextDocument, Title, TodoItem, TodoProject
+from .models import Character, TextDocument, Title, TodoItem, TodoProject
 
 
 class AdultTitleAccessTests(TestCase):
@@ -56,6 +56,57 @@ class AdultTitleAccessTests(TestCase):
 
         self.assertContains(detail, "/media/Covers/Titles/adult/poster.jpg")
         self.assertEqual(media.status_code, 200)
+
+
+class CharacterCreateExperienceTests(TestCase):
+    def setUp(self):
+        self.temp_media = TemporaryDirectory()
+        self.addCleanup(self.temp_media.cleanup)
+        self.media_override = override_settings(MEDIA_LIBRARY_ROOT=Path(self.temp_media.name))
+        self.media_override.enable()
+        self.addCleanup(self.media_override.disable)
+        self.admin = get_user_model().objects.create_superuser("catalog-admin", password="test")
+        self.client.force_login(self.admin)
+        self.title = Title.objects.create(name="Character studio")
+
+    def test_create_form_renders_grouped_experience(self):
+        response = self.client.get(self.title.get_absolute_url())
+
+        self.assertContains(response, 'id="characterCreateForm"')
+        self.assertContains(response, "Внешность и параметры")
+        self.assertContains(response, "Описание персонажа")
+        self.assertContains(response, "Сразу создать папку галереи")
+        self.assertContains(response, 'name="portrait_upload"')
+
+    def test_character_can_be_created_with_portrait_and_gallery(self):
+        portrait = SimpleUploadedFile(
+            "hero.gif",
+            (
+                b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff"
+                b"!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01"
+                b"\x00\x00\x02\x02D\x01\x00;"
+            ),
+            content_type="image/gif",
+        )
+
+        response = self.client.post(
+            self.title.get_absolute_url(),
+            {
+                "name": "Мока",
+                "gender": Character.Gender.FEMALE,
+                "role": "Главная героиня",
+                "race": "Вампир",
+                "portrait_upload": portrait,
+                "create_gallery": "on",
+            },
+        )
+
+        character = Character.objects.get(title=self.title)
+        self.assertRedirects(response, character.get_absolute_url())
+        self.assertTrue(character.portrait_path)
+        self.assertTrue(character.gallery_folder)
+        self.assertTrue((Path(self.temp_media.name) / character.portrait_path).exists())
+        self.assertTrue((Path(self.temp_media.name) / character.gallery_folder).is_dir())
 
 
 class TodoListTests(TestCase):

@@ -13,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from .forms import CharacterForm, TextDocumentUploadForm, TitleForm
+from .forms import CharacterCreateForm, CharacterForm, TextDocumentUploadForm, TitleForm
 from . import library
 from .models import Character, TextDocument, Title, TodoItem, TodoProject
 
@@ -326,7 +326,7 @@ def media_library(request):
 @ensure_csrf_cookie
 def title_detail(request, slug):
     title = get_object_or_404(Title, slug=slug)
-    form = CharacterForm()
+    form = CharacterCreateForm()
     if request.method == "POST":
         if not user_can_manage(request.user):
             raise PermissionDenied("Изменять тайтлы может только администратор")
@@ -337,11 +337,22 @@ def title_detail(request, slug):
             )
             title.save(update_fields=["poster_path", "updated_at"])
             return redirect(title)
-        form = CharacterForm(request.POST)
+        form = CharacterCreateForm(request.POST, request.FILES)
         if form.is_valid():
             character = form.save(commit=False)
             character.title = title
             character.save()
+            if form.cleaned_data.get("portrait_upload"):
+                character.portrait_path = save_cover_upload(
+                    form.cleaned_data["portrait_upload"],
+                    f"Covers/Characters/{title.slug}/{character.slug}",
+                )
+            if form.cleaned_data.get("create_gallery"):
+                character.gallery_folder = ensure_media_folder(
+                    character.gallery_folder or default_character_gallery(character)
+                )
+            if character.portrait_path or character.gallery_folder:
+                character.save(update_fields=["portrait_path", "gallery_folder", "updated_at"])
             return redirect(character)
     characters = title.characters.all()
     return render(request, "photos/title_detail.html", {

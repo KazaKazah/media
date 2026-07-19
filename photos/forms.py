@@ -16,6 +16,14 @@ class TitleForm(forms.ModelForm):
 
 
 class CharacterForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.Select):
+                field.widget.attrs.setdefault("class", "form-select")
+            else:
+                field.widget.attrs.setdefault("class", "form-control")
+
     class Meta:
         model = Character
         fields = [
@@ -42,6 +50,47 @@ class CharacterForm(forms.ModelForm):
             "features": forms.Textarea(attrs={"rows": 4}),
             "abilities": forms.Textarea(attrs={"rows": 4}),
             "notes": forms.Textarea(attrs={"rows": 4}),
+        }
+
+
+class CharacterCreateForm(CharacterForm):
+    portrait_upload = forms.ImageField(
+        label="Портрет",
+        required=False,
+        help_text="JPG, PNG или WEBP. Файл можно добавить позже.",
+        widget=forms.FileInput(attrs={"accept": "image/*", "class": "form-control"}),
+    )
+    create_gallery = forms.BooleanField(
+        label="Сразу создать папку галереи",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    class Meta(CharacterForm.Meta):
+        fields = CharacterForm.Meta.fields
+        widgets = {
+            **CharacterForm.Meta.widgets,
+            "name": forms.TextInput(attrs={
+                "placeholder": "Например, Мока Акашия",
+                "autocomplete": "off",
+                "autofocus": True,
+            }),
+            "role": forms.TextInput(attrs={"placeholder": "Главная героиня, антагонист…"}),
+            "race": forms.TextInput(attrs={"placeholder": "Человек, вампир, демон…"}),
+            "height": forms.TextInput(attrs={"placeholder": "Например, 168 см"}),
+            "weight": forms.TextInput(attrs={"placeholder": "Например, 52 кг"}),
+            "eye_color": forms.TextInput(attrs={"placeholder": "Например, зелёные"}),
+            "hair_color": forms.TextInput(attrs={"placeholder": "Например, серебристые"}),
+            "bust": forms.TextInput(attrs={"placeholder": "Например, 92 см"}),
+            "waist": forms.TextInput(attrs={"placeholder": "Например, 58 см"}),
+            "hips": forms.TextInput(attrs={"placeholder": "Например, 88 см"}),
+            "body": forms.Textarea(attrs={"rows": 3, "placeholder": "Телосложение и внешность"}),
+            "features": forms.Textarea(attrs={"rows": 3, "placeholder": "Характер, привычки, отличительные черты"}),
+            "abilities": forms.Textarea(attrs={"rows": 3, "placeholder": "Навыки и способности"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "placeholder": "Любая дополнительная информация"}),
+            "portrait_path": forms.TextInput(attrs={"placeholder": "Covers/Characters/…"}),
+            "gallery_folder": forms.TextInput(attrs={"placeholder": "Оставьте пустым для автоматического пути"}),
         }
 
 
