@@ -19,65 +19,183 @@
         {% endif %}
       </nav>
 
-      <section class="character-detail-grid">
-        <aside class="character-profile">
-          <div class="character-large-portrait">
+      <header class="character-page-heading">
+        <div>
+          <span class="character-page-eyebrow">{{ character.title.get_kind_display }} · {{ character.get_gender_display }}</span>
+          <h1>{{ character.name }}</h1>
+          <p>{% if character.role %}{{ character.role }}{% else %}Профиль персонажа{% endif %}</p>
+        </div>
+        {% if can_manage %}
+          <span class="character-save-state" id="characterSaveState">Все изменения сохранены</span>
+        {% endif %}
+      </header>
+
+      <section class="character-detail-grid character-studio">
+        <aside class="character-profile character-studio-profile">
+          <div class="character-large-portrait" id="characterPortraitStage">
             {% if character.portrait_path %}
-              <img src="/media/{{ character.portrait_path }}" alt="">
+              <img id="characterPortraitImage" src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
             {% else %}
-              <span>{{ character.name|slice:":1" }}</span>
+              <span id="characterPortraitInitial">{{ character.name|slice:":1" }}</span>
             {% endif %}
             {% if can_manage %}
-              <form class="cover-upload-panel" method="post" enctype="multipart/form-data">
+              <form class="character-portrait-upload" method="post" enctype="multipart/form-data" id="characterPortraitForm">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="upload_portrait">
-                <label for="characterCover">Портрет</label>
+                <label for="characterCover">
+                  <strong>Изменить портрет</strong>
+                  <small>JPG, PNG или WEBP</small>
+                </label>
                 <input id="characterCover" name="cover" type="file" accept="image/*" required>
-                <button class="btn btn-sm btn-light" type="submit">Загрузить</button>
+                <button class="btn btn-sm btn-light" type="submit" disabled>Загрузить портрет</button>
               </form>
             {% endif %}
           </div>
-          <span class="title-kind">{{ character.get_gender_display }}</span>
-          <h1>{{ character.name }}</h1>
-          {% if character.role %}<p>{{ character.role }}</p>{% endif %}
-          {% if character.height or character.weight or character.eye_color or character.hair_color or character.bust or character.waist or character.hips %}
-            <dl class="character-facts">
-              {% if character.height %}<div><dt>Рост</dt><dd>{{ character.height }}</dd></div>{% endif %}
-              {% if character.weight %}<div><dt>Вес</dt><dd>{{ character.weight }}</dd></div>{% endif %}
-              {% if character.eye_color %}<div><dt>Глаза</dt><dd>{{ character.eye_color }}</dd></div>{% endif %}
-              {% if character.hair_color %}<div><dt>Волосы</dt><dd>{{ character.hair_color }}</dd></div>{% endif %}
-              {% if character.bust %}<div><dt>Грудь</dt><dd>{{ character.bust }}</dd></div>{% endif %}
-              {% if character.waist %}<div><dt>Талия</dt><dd>{{ character.waist }}</dd></div>{% endif %}
-              {% if character.hips %}<div><dt>Бёдра</dt><dd>{{ character.hips }}</dd></div>{% endif %}
+
+          <div class="character-profile-identity">
+            <span class="title-kind" id="characterLiveGender">{{ character.get_gender_display }}</span>
+            <h2 id="characterLiveName">{{ character.name }}</h2>
+            <p id="characterLiveRole">{% if character.role %}{{ character.role }}{% else %}Роль не указана{% endif %}</p>
+            {% if character.race %}<span class="character-race-chip" id="characterLiveRace">{{ character.race }}</span>{% else %}<span class="character-race-chip muted" id="characterLiveRace">Раса не указана</span>{% endif %}
+          </div>
+
+          {% if can_manage or character.height or character.weight or character.eye_color or character.hair_color or character.bust or character.waist or character.hips %}
+            <dl class="character-facts character-live-facts">
+              <div data-fact="height"{% if not character.height %} hidden{% endif %}><dt>Рост</dt><dd>{{ character.height }}</dd></div>
+              <div data-fact="weight"{% if not character.weight %} hidden{% endif %}><dt>Вес</dt><dd>{{ character.weight }}</dd></div>
+              <div data-fact="eye_color"{% if not character.eye_color %} hidden{% endif %}><dt>Глаза</dt><dd>{{ character.eye_color }}</dd></div>
+              <div data-fact="hair_color"{% if not character.hair_color %} hidden{% endif %}><dt>Волосы</dt><dd>{{ character.hair_color }}</dd></div>
+              <div data-fact="bust"{% if not character.bust %} hidden{% endif %}><dt>Грудь</dt><dd>{{ character.bust }}</dd></div>
+              <div data-fact="waist"{% if not character.waist %} hidden{% endif %}><dt>Талия</dt><dd>{{ character.waist }}</dd></div>
+              <div data-fact="hips"{% if not character.hips %} hidden{% endif %}><dt>Бёдра</dt><dd>{{ character.hips }}</dd></div>
             </dl>
           {% endif %}
+
           {% if can_manage %}
+            <div class="character-profile-actions">
             {% if character.gallery_folder %}
-              <a class="btn btn-success w-100" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Открыть галерею</a>
+              <a class="btn btn-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">
+                <span>Открыть галерею</span>
+                <small>{{ character.gallery_folder }}</small>
+              </a>
             {% else %}
               <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="create_gallery">
-                <button class="btn btn-success w-100" type="submit">Создать галерею</button>
+                <button class="btn btn-success" type="submit">Создать галерею</button>
               </form>
             {% endif %}
+              <a class="btn btn-outline-secondary" href="{{ character.title.get_absolute_url }}">Все персонажи тайтла</a>
+            </div>
           {% endif %}
         </aside>
 
-        <section class="character-editor">
-          <h2>Информация персонажа</h2>
+        <section class="character-editor character-studio-editor">
           {% if can_manage %}
-            <form method="post" class="stack-form">
+            <div class="character-editor-heading">
+              <div>
+                <span class="character-page-eyebrow">Карточка персонажа</span>
+                <h2>Информация и описание</h2>
+                <p>Изменения отображаются в профиле слева ещё до сохранения.</p>
+              </div>
+              <span class="character-editor-progress" id="characterEditorProgress">0%</span>
+            </div>
+
+            <form method="post" class="character-editor-form" id="characterEditorForm" novalidate>
               {% csrf_token %}
-              {{ form.as_p }}
-              <div class="form-actions">
-                <button class="btn btn-success" type="submit">Сохранить</button>
-                {% if character.gallery_folder %}
-                  <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Перейти к папке</a>
-                {% endif %}
+              {% if form.non_field_errors %}<div class="character-form-alert">{{ form.non_field_errors }}</div>{% endif %}
+
+              <section class="character-editor-section">
+                <div class="character-editor-section-head">
+                  <span>01</span>
+                  <div><h3>Основное</h3><p>Имя, пол, роль и происхождение</p></div>
+                </div>
+                <div class="character-form-grid">
+                  {% for field in form %}
+                    {% if field.name == "name" or field.name == "gender" or field.name == "role" or field.name == "race" %}
+                      <div class="character-field{% if field.name == "name" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span>*</span>{% endif %}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </section>
+
+              <details class="character-editor-section" open>
+                <summary class="character-editor-section-head">
+                  <span>02</span>
+                  <div><h3>Внешность</h3><p>Физические параметры и цвета</p></div>
+                  <small data-section-status></small>
+                </summary>
+                <div class="character-form-grid">
+                  {% for field in form %}
+                    {% if field.name == "height" or field.name == "weight" or field.name == "eye_color" or field.name == "hair_color" or field.name == "bust" or field.name == "waist" or field.name == "hips" %}
+                      <div class="character-field{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="character-editor-section" open>
+                <summary class="character-editor-section-head">
+                  <span>03</span>
+                  <div><h3>История и особенности</h3><p>Подробное описание персонажа</p></div>
+                  <small data-section-status></small>
+                </summary>
+                <div class="character-form-grid character-form-textareas">
+                  {% for field in form %}
+                    {% if field.name == "body" or field.name == "features" or field.name == "abilities" or field.name == "notes" %}
+                      <div class="character-field{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        <span class="character-counter" data-counter-for="{{ field.id_for_label }}">0</span>
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+
+              <details class="character-editor-section character-editor-technical">
+                <summary class="character-editor-section-head">
+                  <span>04</span>
+                  <div><h3>Системные пути</h3><p>Связь с файлами медиатеки</p></div>
+                  <small data-section-status></small>
+                </summary>
+                <div class="character-form-grid">
+                  {% for field in form %}
+                    {% if field.name == "portrait_path" or field.name == "gallery_folder" %}
+                      <div class="character-field character-field-wide{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {{ field.errors }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </details>
+
+              <div class="character-editor-actions">
+                <span id="characterDirtyHint">Изменений нет</span>
+                <div>
+                  <a class="btn btn-outline-secondary" href="{{ character.get_absolute_url }}">Отменить</a>
+                  <button class="btn btn-success" type="submit">Сохранить изменения</button>
+                </div>
               </div>
             </form>
           {% else %}
+            <div class="character-editor-heading">
+              <div>
+                <span class="character-page-eyebrow">Карточка персонажа</span>
+                <h2>Информация и описание</h2>
+              </div>
+            </div>
             <dl class="character-readonly">
               {% if character.race %}<div><dt>Раса</dt><dd>{{ character.race }}</dd></div>{% endif %}
               {% if character.body %}<div><dt>Тело</dt><dd>{{ character.body }}</dd></div>{% endif %}
@@ -92,5 +210,105 @@
         </section>
       </section>
     </main>
+    {% if can_manage %}
+      <script>
+        const editorForm = document.querySelector("#characterEditorForm");
+        const portraitForm = document.querySelector("#characterPortraitForm");
+        const portraitInput = document.querySelector("#characterCover");
+        const portraitImage = document.querySelector("#characterPortraitImage");
+        const portraitInitial = document.querySelector("#characterPortraitInitial");
+        let portraitPreviewUrl = "";
+
+        portraitInput?.addEventListener("change", () => {
+          if (portraitPreviewUrl) URL.revokeObjectURL(portraitPreviewUrl);
+          const file = portraitInput.files[0];
+          portraitPreviewUrl = file ? URL.createObjectURL(file) : "";
+          if (!portraitImage && portraitPreviewUrl) {
+            const image = document.createElement("img");
+            image.id = "characterPortraitImage";
+            image.alt = "";
+            document.querySelector("#characterPortraitStage").prepend(image);
+          }
+          const activeImage = document.querySelector("#characterPortraitImage");
+          if (activeImage && portraitPreviewUrl) activeImage.src = portraitPreviewUrl;
+          if (portraitInitial) portraitInitial.hidden = Boolean(portraitPreviewUrl);
+          portraitForm.querySelector("button").disabled = !file;
+        });
+
+        if (editorForm) {
+          const fields = [...editorForm.querySelectorAll("input:not([type=hidden]), select, textarea")];
+          const initialValues = new Map(fields.map((field) => [field.name, field.value]));
+          const saveState = document.querySelector("#characterSaveState");
+          const dirtyHint = document.querySelector("#characterDirtyHint");
+          const progress = document.querySelector("#characterEditorProgress");
+          let submitting = false;
+
+          const valueOf = (name) => editorForm.elements[name]?.value.trim() || "";
+          const setLiveText = (selector, value, fallback) => {
+            const element = document.querySelector(selector);
+            if (element) element.textContent = value || fallback;
+          };
+
+          const updateEditor = () => {
+            setLiveText("#characterLiveName", valueOf("name"), "Без имени");
+            setLiveText("#characterLiveRole", valueOf("role"), "Роль не указана");
+            const gender = editorForm.elements.gender;
+            setLiveText("#characterLiveGender", gender?.selectedOptions[0]?.textContent, "Другое");
+            const race = document.querySelector("#characterLiveRace");
+            if (race) {
+              race.textContent = valueOf("race") || "Раса не указана";
+              race.classList.toggle("muted", !valueOf("race"));
+            }
+
+            document.querySelectorAll("[data-fact]").forEach((fact) => {
+              const value = valueOf(fact.dataset.fact);
+              fact.hidden = !value;
+              fact.querySelector("dd").textContent = value;
+            });
+
+            editorForm.querySelectorAll("[data-counter-for]").forEach((counter) => {
+              const field = document.getElementById(counter.dataset.counterFor);
+              counter.textContent = field?.value.length || 0;
+            });
+
+            editorForm.querySelectorAll("details.character-editor-section").forEach((section) => {
+              const sectionFields = [...section.querySelectorAll("input, select, textarea")];
+              const filled = sectionFields.filter((field) => field.value.trim()).length;
+              const status = section.querySelector("[data-section-status]");
+              if (status) status.textContent = filled ? `${filled} заполнено` : "Не заполнено";
+            });
+
+            const filled = fields.filter((field) => field.value.trim()).length;
+            const percentage = Math.round((filled / fields.length) * 100);
+            progress.textContent = `${percentage}%`;
+            progress.style.setProperty("--progress", `${percentage * 3.6}deg`);
+
+            const dirty = fields.some((field) => field.value !== initialValues.get(field.name));
+            saveState.textContent = dirty ? "Есть несохранённые изменения" : "Все изменения сохранены";
+            saveState.classList.toggle("is-dirty", dirty);
+            dirtyHint.textContent = dirty ? "Изменения ещё не сохранены" : "Изменений нет";
+            editorForm.classList.toggle("is-dirty", dirty);
+          };
+
+          fields.forEach((field) => {
+            field.addEventListener("input", updateEditor);
+            field.addEventListener("change", updateEditor);
+          });
+          editorForm.addEventListener("submit", () => { submitting = true; });
+          document.addEventListener("keydown", (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+              event.preventDefault();
+              editorForm.requestSubmit();
+            }
+          });
+          window.addEventListener("beforeunload", (event) => {
+            if (submitting || !editorForm.classList.contains("is-dirty")) return;
+            event.preventDefault();
+            event.returnValue = "";
+          });
+          updateEditor();
+        }
+      </script>
+    {% endif %}
   </body>
 </html>
