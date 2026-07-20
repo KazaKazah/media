@@ -1,0 +1,108 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Добавить фото — {{ character.name }}</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery">
+  </head>
+  <body class="character-upload-page">
+    <main class="character-upload-shell">
+      <nav class="detail-nav">
+        <a href="{{ character.get_absolute_url }}">← Профиль персонажа</a>
+        <a href="{% url 'photos:character_gallery' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Просмотр галереи</a>
+      </nav>
+
+      <section class="character-upload-card">
+        <header>
+          <span class="character-page-eyebrow">{{ character.title.name }}</span>
+          <h1>Добавить фото</h1>
+          <p>{{ character.name }}{% if current_folder %} · {{ current_folder }}{% endif %}</p>
+        </header>
+
+        {% if error %}<div class="character-form-alert">{{ error }}</div>{% endif %}
+
+        <form method="post" enctype="multipart/form-data" id="characterPhotoUpload">
+          {% csrf_token %}
+          <input type="hidden" name="folder" value="{{ current_folder }}">
+          <label class="character-upload-drop" for="characterPhotos" id="characterUploadDrop">
+            <span aria-hidden="true">＋</span>
+            <strong>Выберите или перетащите фотографии</strong>
+            <small>Можно выбрать несколько JPG, PNG, GIF, WEBP или AVIF</small>
+            <input id="characterPhotos" name="photos" type="file" accept="image/*" multiple required>
+          </label>
+
+          <div class="character-upload-preview" id="characterUploadPreview" hidden>
+            <div><strong id="characterUploadCount"></strong><button id="characterUploadClear" type="button">Очистить</button></div>
+            <section id="characterUploadGrid"></section>
+          </div>
+
+          <div class="character-upload-actions">
+            <a class="btn btn-outline-secondary" href="{{ character.get_absolute_url }}">Отменить</a>
+            <button class="btn btn-success" id="characterUploadSubmit" type="submit" disabled>Загрузить и вернуться к персонажу</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#characterPhotoUpload");
+      const input = document.querySelector("#characterPhotos");
+      const drop = document.querySelector("#characterUploadDrop");
+      const panel = document.querySelector("#characterUploadPreview");
+      const grid = document.querySelector("#characterUploadGrid");
+      const count = document.querySelector("#characterUploadCount");
+      const submit = document.querySelector("#characterUploadSubmit");
+      let previewUrls = [];
+
+      const clearPreviews = () => {
+        previewUrls.forEach((url) => URL.revokeObjectURL(url));
+        previewUrls = [];
+        grid.replaceChildren();
+      };
+      const renderFiles = () => {
+        clearPreviews();
+        const files = [...input.files];
+        panel.hidden = files.length === 0;
+        submit.disabled = files.length === 0;
+        count.textContent = `Выбрано фото: ${files.length}`;
+        files.forEach((file) => {
+          const url = URL.createObjectURL(file);
+          previewUrls.push(url);
+          const item = document.createElement("article");
+          const image = document.createElement("img");
+          const name = document.createElement("small");
+          image.src = url;
+          image.alt = "";
+          name.textContent = file.name;
+          item.append(image, name);
+          grid.append(item);
+        });
+      };
+
+      input.addEventListener("change", renderFiles);
+      document.querySelector("#characterUploadClear").addEventListener("click", () => {
+        input.value = "";
+        renderFiles();
+      });
+      ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => {
+        event.preventDefault();
+        drop.classList.add("is-dragging");
+      }));
+      ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, () => drop.classList.remove("is-dragging")));
+      drop.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const transfer = new DataTransfer();
+        [...event.dataTransfer.files].filter((file) => file.type.startsWith("image/")).forEach((file) => transfer.items.add(file));
+        input.files = transfer.files;
+        renderFiles();
+      });
+      form.addEventListener("submit", () => {
+        submit.disabled = true;
+        submit.textContent = "Загрузка…";
+      });
+    </script>
+  </body>
+</html>

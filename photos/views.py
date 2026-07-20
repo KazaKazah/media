@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -476,6 +476,112 @@ def legacy_character_detail(request, title_slug, character_slug):
         slug=character_slug,
     )
     return redirect(character, permanent=True)
+
+
+def character_gallery_location(character: Character, requested_folder: str = ""):
+    if not character.gallery_folder:
+        raise Http404("Галерея персонажа ещё не создана")
+    base_rel, base_path = library.resolve_media_path(character.gallery_folder)
+    if not base_path.is_dir():
+        raise Http404("Папка галереи не найдена")
+    subfolder = library.normalize_relative(requested_folder)
+    current_rel = f"{base_rel}/{subfolder}" if subfolder else base_rel
+    current_rel, current_path = library.resolve_media_path(current_rel)
+    try:
+        current_path.relative_to(base_path)
+    except ValueError as error:
+        raise SuspiciousFileOperation("Папка находится за пределами галереи персонажа") from error
+    if not current_path.is_dir():
+        raise Http404("Папка галереи не найдена")
+    return base_rel, base_path, subfolder, current_rel
+
+
+@ensure_csrf_cookie
+@admin_required
+def character_gallery(request, character_id, character_slug):
+    character = get_object_or_404(
+        Character.objects.select_related("title"),
+        pk=character_id,
+        slug=character_slug,
+    )
+    base_rel, _, subfolder, current_rel = character_gallery_location(
+        character,
+        request.GET.get("folder", ""),
+    )
+    listing = library.list_folder(current_rel, 0, 200)
+    files = list(listing["files"])
+    while listing["hasMore"]:
+        listing = library.list_folder(current_rel, listing["nextOffset"], 200)
+        files.extend(listing["files"])
+
+    folders = []
+    for folder in library.list_folder(current_rel, 0, 1)["folders"]:
+        relative = folder["path"][len(base_rel):].lstrip("/")
+        preview = folder.get("cover", "")
+        if not preview:
+            child_listing = library.list_folder(folder["path"], 0, 1)
+            first_file = child_listing["files"][0] if child_listing["files"] else None
+            preview = first_file["path"] if first_file and first_file["type"] == "image" else ""
+        if preview:
+            try:
+                _, preview_path = library.resolve_media_path(preview)
+                if not library.is_image_file(preview_path):
+                    preview = ""
+            except SuspiciousFileOperation:
+                preview = ""
+        folders.append({**folder, "relative": relative, "preview": preview})
+
+    breadcrumbs = []
+    parts = [part for part in subfolder.split("/") if part]
+    for index, part in enumerate(parts):
+        breadcrumbs.append({"name": part, "path": "/".join(parts[:index + 1])})
+
+    return render(request, "photos/character_gallery.html", {
+        "breadcrumbs": breadcrumbs,
+        "character": character,
+        "current_folder": subfolder,
+        "files": files,
+        "folders": folders,
+        "image_count": sum(file["type"] == "image" for file in files),
+        "video_count": sum(file["type"] == "video" for file in files),
+    })
+
+
+@ensure_csrf_cookie
+@admin_required
+def character_gallery_upload(request, character_id, character_slug):
+    character = get_object_or_404(
+        Character.objects.select_related("title"),
+        pk=character_id,
+        slug=character_slug,
+    )
+    if not character.gallery_folder:
+        character.gallery_folder = ensure_media_folder(default_character_gallery(character))
+        character.save(update_fields=["gallery_folder", "updated_at"])
+
+    _, _, subfolder, current_rel = character_gallery_location(
+        character,
+        request.GET.get("folder", "") if request.method == "GET" else request.POST.get("folder", ""),
+    )
+    error = ""
+    selected_files = []
+    if request.method == "POST":
+        selected_files = request.FILES.getlist("photos")
+        if not selected_files:
+            error = "Выберите хотя бы одно изображение."
+        elif any(Path(upload.name).suffix.lower() not in library.IMAGE_EXTENSIONS for upload in selected_files):
+            error = "Можно загружать только изображения."
+        else:
+            result = library.save_uploaded_files(current_rel, selected_files)
+            if result["saved"]:
+                return redirect(f"{character.get_absolute_url()}?uploaded={len(result['saved'])}")
+            error = "Не удалось сохранить выбранные изображения."
+
+    return render(request, "photos/character_gallery_upload.html", {
+        "character": character,
+        "current_folder": subfolder,
+        "error": error,
+    })
 
 
 @require_POST

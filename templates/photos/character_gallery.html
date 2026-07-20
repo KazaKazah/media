@@ -1,0 +1,139 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Галерея {{ character.name }}</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery">
+  </head>
+  <body class="character-gallery-page">
+    <main class="character-gallery-shell">
+      <nav class="detail-nav">
+        <a href="{{ character.get_absolute_url }}">← {{ character.name }}</a>
+        <a href="{% url 'photos:title_characters' character.title.slug %}">Все персонажи</a>
+        <a href="{% url 'photos:media_library' %}?path={{ character.gallery_folder|urlencode }}">Общая медиатека</a>
+      </nav>
+
+      <header class="character-gallery-hero">
+        <div>
+          <span class="character-page-eyebrow">{{ character.title.name }}</span>
+          <h1>Галерея {{ character.name }}</h1>
+          <p>Отдельный просмотр фотографий и папок персонажа.</p>
+        </div>
+        <div class="character-gallery-stats">
+          <span><strong>{{ image_count }}</strong> фото</span>
+          {% if video_count %}<span><strong>{{ video_count }}</strong> видео</span>{% endif %}
+          <span><strong>{{ folders|length }}</strong> папок</span>
+        </div>
+        <a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">
+          Добавить фото
+        </a>
+      </header>
+
+      <nav class="character-gallery-breadcrumbs" aria-label="Путь галереи">
+        <a href="{% url 'photos:character_gallery' character.pk character.slug %}">Все фото</a>
+        {% for crumb in breadcrumbs %}
+          <span>›</span>
+          <a href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ crumb.path|urlencode }}">{{ crumb.name }}</a>
+        {% endfor %}
+      </nav>
+
+      {% if folders %}
+        <section class="character-gallery-folders">
+          {% for folder in folders %}
+            <a class="character-gallery-folder" href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ folder.relative|urlencode }}">
+              <span>
+                {% if folder.preview %}
+                  <img src="{% url 'photos:thumbnail' 'thumb' folder.preview %}" alt="">
+                {% else %}
+                  <i aria-hidden="true"></i>
+                {% endif %}
+              </span>
+              <strong>{{ folder.name }}</strong>
+              <small>Открыть папку →</small>
+            </a>
+          {% endfor %}
+        </section>
+      {% endif %}
+
+      {% if files %}
+        <section class="character-masonry" id="characterMasonry">
+          {% for file in files %}
+            <button class="character-masonry-card" type="button"
+                    data-kind="{{ file.type }}"
+                    data-name="{{ file.name }}"
+                    data-source="{% url 'photos:media' file.path %}">
+              {% if file.type == "image" %}
+                <img src="{% url 'photos:thumbnail' 'thumb' file.path %}" alt="{{ file.name }}" loading="lazy">
+              {% else %}
+                <video src="{% url 'photos:media' file.path %}" muted preload="metadata"></video>
+                <span class="character-video-badge">Видео</span>
+              {% endif %}
+              <span class="character-masonry-caption">{{ file.name }}</span>
+            </button>
+          {% endfor %}
+        </section>
+      {% elif not folders %}
+        <section class="character-gallery-empty">
+          <span aria-hidden="true">▧</span>
+          <h2>В этой папке пока нет фотографий</h2>
+          <p>Добавьте первые изображения — после загрузки вы вернётесь в профиль персонажа.</p>
+          <a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Добавить фото</a>
+        </section>
+      {% endif %}
+    </main>
+
+    <dialog class="character-gallery-viewer" id="characterGalleryViewer">
+      <div class="character-gallery-viewer-head">
+        <div><strong id="galleryViewerName"></strong><span id="galleryViewerCounter"></span></div>
+        <button type="button" id="galleryViewerClose" aria-label="Закрыть">×</button>
+      </div>
+      <div class="character-gallery-viewer-stage" id="galleryViewerStage"></div>
+      <button class="character-gallery-viewer-nav previous" id="galleryViewerPrevious" type="button" aria-label="Предыдущее">‹</button>
+      <button class="character-gallery-viewer-nav next" id="galleryViewerNext" type="button" aria-label="Следующее">›</button>
+    </dialog>
+
+    <script>
+      const cards = [...document.querySelectorAll(".character-masonry-card")];
+      const viewer = document.querySelector("#characterGalleryViewer");
+      const stage = document.querySelector("#galleryViewerStage");
+      const viewerName = document.querySelector("#galleryViewerName");
+      const viewerCounter = document.querySelector("#galleryViewerCounter");
+      let currentIndex = 0;
+
+      const showMedia = (index) => {
+        if (!cards.length) return;
+        currentIndex = (index + cards.length) % cards.length;
+        const card = cards[currentIndex];
+        const media = document.createElement(card.dataset.kind === "video" ? "video" : "img");
+        media.src = card.dataset.source;
+        media.alt = card.dataset.name;
+        if (card.dataset.kind === "video") {
+          media.controls = true;
+          media.autoplay = true;
+        }
+        stage.replaceChildren(media);
+        viewerName.textContent = card.dataset.name;
+        viewerCounter.textContent = `${currentIndex + 1} / ${cards.length}`;
+      };
+
+      cards.forEach((card, index) => card.addEventListener("click", () => {
+        showMedia(index);
+        viewer.showModal();
+      }));
+      document.querySelector("#galleryViewerClose").addEventListener("click", () => viewer.close());
+      document.querySelector("#galleryViewerPrevious").addEventListener("click", () => showMedia(currentIndex - 1));
+      document.querySelector("#galleryViewerNext").addEventListener("click", () => showMedia(currentIndex + 1));
+      viewer.addEventListener("click", (event) => {
+        if (event.target === viewer) viewer.close();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!viewer.open) return;
+        if (event.key === "ArrowLeft") showMedia(currentIndex - 1);
+        if (event.key === "ArrowRight") showMedia(currentIndex + 1);
+      });
+    </script>
+  </body>
+</html>

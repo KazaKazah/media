@@ -23,6 +23,16 @@ urlpatterns = [
     ),
     path("characters/<int:character_id>-<str:character_slug>/", views.character_detail, name="character_detail"),
     path(
+        "characters/<int:character_id>-<str:character_slug>/gallery/",
+        views.character_gallery,
+        name="character_gallery",
+    ),
+    path(
+        "characters/<int:character_id>-<str:character_slug>/gallery/upload/",
+        views.character_gallery_upload,
+        name="character_gallery_upload",
+    ),
+    path(
         "titles/<str:title_slug>/characters/<str:character_slug>/delete/",
         views.character_delete,
         name="character_delete",

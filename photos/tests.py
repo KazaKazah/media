@@ -128,6 +128,47 @@ class CharacterCreateExperienceTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_character_gallery_lists_images_and_subfolders(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Эрис",
+            gallery_folder="Catalog/character-studio/female/eris",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        (gallery / "Арты").mkdir(parents=True)
+        (gallery / "portrait.jpg").write_bytes(b"image")
+        (gallery / "Арты" / "art.jpg").write_bytes(b"image")
+
+        response = self.client.get(
+            f"{character.get_absolute_url()}gallery/"
+        )
+
+        self.assertContains(response, "Галерея Эрис")
+        self.assertContains(response, "portrait.jpg")
+        self.assertContains(response, "Арты")
+        self.assertContains(response, "Добавить фото")
+
+    def test_gallery_upload_returns_to_character_profile(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Акено",
+            gallery_folder="Catalog/character-studio/female/akeno",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        gallery.mkdir(parents=True)
+        photo = SimpleUploadedFile("new-photo.jpg", b"image", content_type="image/jpeg")
+
+        response = self.client.post(
+            f"{character.get_absolute_url()}gallery/upload/",
+            {"photos": photo},
+        )
+
+        self.assertRedirects(
+            response,
+            f"{character.get_absolute_url()}?uploaded=1",
+        )
+        self.assertTrue((gallery / "new-photo.jpg").exists())
+
 
 class TodoListTests(TestCase):
     def setUp(self):

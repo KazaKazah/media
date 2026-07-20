@@ -32,6 +32,14 @@
         {% endif %}
       </header>
 
+      {% if request.GET.uploaded %}
+        <div class="character-upload-success">
+          <span>✓</span>
+          <div><strong>Фотографии добавлены</strong><small>Загружено файлов: {{ request.GET.uploaded }}</small></div>
+          <a href="{% url 'photos:character_gallery' character.pk character.slug %}">Посмотреть галерею →</a>
+        </div>
+      {% endif %}
+
       <section class="character-detail-grid character-studio">
         <aside class="character-profile character-studio-profile">
           <div class="character-large-portrait" id="characterPortraitStage">
@@ -78,10 +86,12 @@
           {% if can_manage %}
             <div class="character-profile-actions">
             {% if character.gallery_folder %}
-              <a class="btn btn-success" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">
-                <span>Открыть галерею</span>
-                <small>{{ character.gallery_folder }}</small>
+              <a class="btn btn-success" href="{% url 'photos:character_gallery' character.pk character.slug %}">
+                <span>Галерея персонажа</span>
+                <small>Просмотр фото и папок</small>
               </a>
+              <a class="btn btn-outline-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}">Добавить фото</a>
+              <a class="btn btn-outline-secondary" href="{% url 'photos:media_library' %}?path={{ character.gallery_folder }}">Управление в медиатеке</a>
             {% else %}
               <form method="post">
                 {% csrf_token %}
@@ -89,7 +99,7 @@
                 <button class="btn btn-success" type="submit">Создать галерею</button>
               </form>
             {% endif %}
-              <a class="btn btn-outline-secondary" href="{{ character.title.get_absolute_url }}">Все персонажи тайтла</a>
+              <a class="btn btn-outline-secondary" href="{% url 'photos:title_characters' character.title.slug %}">Все персонажи тайтла</a>
             </div>
           {% endif %}
         </aside>
