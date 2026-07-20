@@ -13,13 +13,15 @@ urlpatterns = [
     path("titles/", views.index, name="index"),
     path("library/", views.media_library, name="media_library"),
     path("titles/<str:slug>/", views.title_detail, name="title_detail"),
+    path("titles/<str:slug>/characters/", views.title_characters, name="title_characters"),
     path("titles/<str:slug>/edit/", views.title_edit, name="title_edit"),
     path("titles/<str:slug>/delete/", views.title_delete, name="title_delete"),
     path(
         "titles/<str:title_slug>/characters/<str:character_slug>/",
-        views.character_detail,
-        name="character_detail",
+        views.legacy_character_detail,
+        name="legacy_character_detail",
     ),
+    path("characters/<int:character_id>-<str:character_slug>/", views.character_detail, name="character_detail"),
     path(
         "titles/<str:title_slug>/characters/<str:character_slug>/delete/",
         views.character_delete,

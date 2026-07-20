@@ -6,12 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ character.name }} — {{ character.title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-characters">
   </head>
   <body>
     <main class="catalog-shell">
       <nav class="detail-nav">
         <a href="{{ character.title.get_absolute_url }}">← {{ character.title.name }}</a>
+        <a href="{% url 'photos:title_characters' character.title.slug %}">Все персонажи</a>
         {% if can_manage %}
           <a href="{% url 'photos:media_library' %}">Медиатека</a>
         {% elif not request.user.is_authenticated %}
@@ -23,6 +24,7 @@
         <div>
           <span class="character-page-eyebrow">{{ character.title.get_kind_display }} · {{ character.get_gender_display }}</span>
           <h1>{{ character.name }}</h1>
+          {% if character.original_name %}<p class="character-original-name">{{ character.original_name }}</p>{% endif %}
           <p>{% if character.role %}{{ character.role }}{% else %}Профиль персонажа{% endif %}</p>
         </div>
         {% if can_manage %}
@@ -54,7 +56,9 @@
 
           <div class="character-profile-identity">
             <span class="title-kind" id="characterLiveGender">{{ character.get_gender_display }}</span>
+            <span class="character-importance-chip" id="characterLiveImportance">{{ character.get_importance_display }}</span>
             <h2 id="characterLiveName">{{ character.name }}</h2>
+            <small id="characterLiveOriginal">{{ character.original_name }}</small>
             <p id="characterLiveRole">{% if character.role %}{{ character.role }}{% else %}Роль не указана{% endif %}</p>
             {% if character.race %}<span class="character-race-chip" id="characterLiveRace">{{ character.race }}</span>{% else %}<span class="character-race-chip muted" id="characterLiveRace">Раса не указана</span>{% endif %}
           </div>
@@ -112,7 +116,7 @@
                 </div>
                 <div class="character-form-grid">
                   {% for field in form %}
-                    {% if field.name == "name" or field.name == "gender" or field.name == "role" or field.name == "race" %}
+                    {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" %}
                       <div class="character-field{% if field.name == "name" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
                         <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span>*</span>{% endif %}</label>
                         {{ field }}
@@ -251,9 +255,12 @@
 
           const updateEditor = () => {
             setLiveText("#characterLiveName", valueOf("name"), "Без имени");
+            setLiveText("#characterLiveOriginal", valueOf("original_name"), "");
             setLiveText("#characterLiveRole", valueOf("role"), "Роль не указана");
             const gender = editorForm.elements.gender;
             setLiveText("#characterLiveGender", gender?.selectedOptions[0]?.textContent, "Другое");
+            const importance = editorForm.elements.importance;
+            setLiveText("#characterLiveImportance", importance?.selectedOptions[0]?.textContent, "Персонаж");
             const race = document.querySelector("#characterLiveRace");
             if (race) {
               race.textContent = valueOf("race") || "Раса не указана";

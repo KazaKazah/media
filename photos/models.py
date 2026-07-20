@@ -54,10 +54,22 @@ class Character(models.Model):
         MALE = "male", "Мужской"
         OTHER = "other", "Другое"
 
+    class Importance(models.TextChoices):
+        MAIN = "main", "Главный персонаж"
+        SUPPORTING = "supporting", "Второстепенный персонаж"
+        EPISODIC = "episodic", "Эпизодический персонаж"
+
     title = models.ForeignKey(Title, on_delete=models.CASCADE, related_name="characters")
     name = models.CharField("Имя", max_length=220)
+    original_name = models.CharField("Оригинальное имя", max_length=220, blank=True)
     slug = models.SlugField("URL", max_length=240, blank=True)
     gender = models.CharField("Пол", max_length=20, choices=Gender.choices, default=Gender.FEMALE)
+    importance = models.CharField(
+        "Роль в сюжете",
+        max_length=20,
+        choices=Importance.choices,
+        default=Importance.SUPPORTING,
+    )
     role = models.CharField("Роль", max_length=120, blank=True)
     race = models.CharField("Раса", max_length=160, blank=True)
     height = models.CharField("Рост", max_length=80, blank=True)
@@ -97,7 +109,7 @@ class Character(models.Model):
     def get_absolute_url(self):
         return reverse(
             "photos:character_detail",
-            kwargs={"title_slug": self.title.slug, "character_slug": self.slug},
+            kwargs={"character_id": self.pk, "character_slug": self.slug},
         )
 
 

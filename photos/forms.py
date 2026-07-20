@@ -28,7 +28,9 @@ class CharacterForm(forms.ModelForm):
         model = Character
         fields = [
             "name",
+            "original_name",
             "gender",
+            "importance",
             "role",
             "race",
             "height",
@@ -76,6 +78,7 @@ class CharacterCreateForm(CharacterForm):
                 "autocomplete": "off",
                 "autofocus": True,
             }),
+            "original_name": forms.TextInput(attrs={"placeholder": "Например, 赤夜 萌香 / Moka Akashiya"}),
             "role": forms.TextInput(attrs={"placeholder": "Главная героиня, антагонист…"}),
             "race": forms.TextInput(attrs={"placeholder": "Человек, вампир, демон…"}),
             "height": forms.TextInput(attrs={"placeholder": "Например, 168 см"}),

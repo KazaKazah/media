@@ -70,11 +70,11 @@ class CharacterCreateExperienceTests(TestCase):
         self.title = Title.objects.create(name="Character studio")
 
     def test_create_form_renders_grouped_experience(self):
-        response = self.client.get(self.title.get_absolute_url())
+        response = self.client.get(f"{self.title.get_absolute_url()}characters/")
 
-        self.assertContains(response, 'id="characterCreateForm"')
-        self.assertContains(response, "Внешность и параметры")
-        self.assertContains(response, "Описание персонажа")
+        self.assertContains(response, 'id="directoryCharacterForm"')
+        self.assertContains(response, "Внешность и подробное описание")
+        self.assertContains(response, "Роль в сюжете")
         self.assertContains(response, "Сразу создать папку галереи")
         self.assertContains(response, 'name="portrait_upload"')
 
@@ -90,10 +90,11 @@ class CharacterCreateExperienceTests(TestCase):
         )
 
         response = self.client.post(
-            self.title.get_absolute_url(),
+            f"{self.title.get_absolute_url()}characters/",
             {
                 "name": "Мока",
                 "gender": Character.Gender.FEMALE,
+                "importance": Character.Importance.MAIN,
                 "role": "Главная героиня",
                 "race": "Вампир",
                 "portrait_upload": portrait,
@@ -107,6 +108,25 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertTrue(character.gallery_folder)
         self.assertTrue((Path(self.temp_media.name) / character.portrait_path).exists())
         self.assertTrue((Path(self.temp_media.name) / character.gallery_folder).is_dir())
+
+    def test_title_links_to_directory_and_legacy_character_url_redirects(self):
+        character = Character.objects.create(title=self.title, name="Эрис")
+
+        title_page = self.client.get(self.title.get_absolute_url())
+        directory = self.client.get(f"{self.title.get_absolute_url()}characters/")
+        legacy = self.client.get(
+            f"{self.title.get_absolute_url()}characters/{character.slug}/"
+        )
+
+        self.assertContains(title_page, "Все персонажи")
+        self.assertContains(directory, character.name)
+        self.assertTrue(character.get_absolute_url().startswith(f"/characters/{character.pk}-"))
+        self.assertRedirects(
+            legacy,
+            character.get_absolute_url(),
+            status_code=301,
+            fetch_redirect_response=False,
+        )
 
 
 class TodoListTests(TestCase):

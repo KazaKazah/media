@@ -326,7 +326,6 @@ def media_library(request):
 @ensure_csrf_cookie
 def title_detail(request, slug):
     title = get_object_or_404(Title, slug=slug)
-    form = CharacterCreateForm()
     if request.method == "POST":
         if not user_can_manage(request.user):
             raise PermissionDenied("Изменять тайтлы может только администратор")
@@ -337,6 +336,28 @@ def title_detail(request, slug):
             )
             title.save(update_fields=["poster_path", "updated_at"])
             return redirect(title)
+    characters = title.characters.annotate(
+        importance_rank=Case(
+            When(importance=Character.Importance.MAIN, then=0),
+            When(importance=Character.Importance.SUPPORTING, then=1),
+            default=2,
+            output_field=IntegerField(),
+        )
+    ).order_by("importance_rank", "name")
+    return render(request, "photos/title_detail.html", {
+        "can_manage": user_can_manage(request.user),
+        "title": title,
+        "character_preview": characters[:8],
+    })
+
+
+@ensure_csrf_cookie
+def title_characters(request, slug):
+    title = get_object_or_404(Title, slug=slug)
+    form = CharacterCreateForm()
+    if request.method == "POST":
+        if not user_can_manage(request.user):
+            raise PermissionDenied("Добавлять персонажей может только администратор")
         form = CharacterCreateForm(request.POST, request.FILES)
         if form.is_valid():
             character = form.save(commit=False)
@@ -354,14 +375,23 @@ def title_detail(request, slug):
             if character.portrait_path or character.gallery_folder:
                 character.save(update_fields=["portrait_path", "gallery_folder", "updated_at"])
             return redirect(character)
-    characters = title.characters.all()
-    return render(request, "photos/title_detail.html", {
+
+    characters = title.characters.annotate(
+        importance_rank=Case(
+            When(importance=Character.Importance.MAIN, then=0),
+            When(importance=Character.Importance.SUPPORTING, then=1),
+            default=2,
+            output_field=IntegerField(),
+        )
+    ).order_by("importance_rank", "name")
+    return render(request, "photos/title_characters.html", {
         "can_manage": user_can_manage(request.user),
         "title": title,
         "form": form,
-        "female_characters": characters.filter(gender=Character.Gender.FEMALE),
-        "male_characters": characters.filter(gender=Character.Gender.MALE),
-        "other_characters": characters.filter(gender=Character.Gender.OTHER),
+        "characters": characters,
+        "main_characters": characters.filter(importance=Character.Importance.MAIN),
+        "supporting_characters": characters.filter(importance=Character.Importance.SUPPORTING),
+        "episodic_characters": characters.filter(importance=Character.Importance.EPISODIC),
     })
 
 
@@ -406,10 +436,10 @@ def save_cover_upload(uploaded_file, target_folder: str) -> str:
 
 
 @ensure_csrf_cookie
-def character_detail(request, title_slug, character_slug):
+def character_detail(request, character_id, character_slug):
     character = get_object_or_404(
         Character.objects.select_related("title"),
-        title__slug=title_slug,
+        pk=character_id,
         slug=character_slug,
     )
     form = CharacterForm(request.POST or None, instance=character)
@@ -437,6 +467,15 @@ def character_detail(request, title_slug, character_slug):
         "character": character,
         "form": form,
     })
+
+
+def legacy_character_detail(request, title_slug, character_slug):
+    character = get_object_or_404(
+        Character.objects.select_related("title"),
+        title__slug=title_slug,
+        slug=character_slug,
+    )
+    return redirect(character, permanent=True)
 
 
 @require_POST

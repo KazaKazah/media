@@ -1,0 +1,216 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Персонажи — {{ title.name }}</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-characters">
+  </head>
+  <body>
+    <main class="catalog-shell">
+      <nav class="detail-nav">
+        <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
+        <a href="{% url 'photos:index' %}">Каталог</a>
+        {% if can_manage %}<a href="#add-character">Добавить персонажа</a>{% endif %}
+      </nav>
+
+      <header class="characters-directory-hero">
+        <div class="characters-directory-poster">
+          {% if title.poster_path %}<img src="/media/{{ title.poster_path }}" alt="">{% else %}<span>{{ title.get_kind_display }}</span>{% endif %}
+        </div>
+        <div>
+          <span class="character-page-eyebrow">{{ title.get_kind_display }} · база персонажей</span>
+          <h1>Персонажи</h1>
+          <p>{{ title.name }}</p>
+          {% if title.original_name %}<small>{{ title.original_name }}</small>{% endif %}
+        </div>
+        <div class="characters-directory-count">
+          <strong>{{ characters|length }}</strong>
+          <span>всего</span>
+        </div>
+      </header>
+
+      <section class="characters-directory-tools">
+        <label class="characters-search">
+          <span>⌕</span>
+          <input id="directorySearch" type="search" placeholder="Имя, роль, раса…" autocomplete="off">
+        </label>
+        <div class="characters-filters" id="directoryFilters">
+          <button class="active" type="button" data-filter="all">Все <span>{{ characters|length }}</span></button>
+          <button type="button" data-filter="main">Главные <span>{{ main_characters|length }}</span></button>
+          <button type="button" data-filter="supporting">Второстепенные <span>{{ supporting_characters|length }}</span></button>
+          <button type="button" data-filter="episodic">Эпизодические <span>{{ episodic_characters|length }}</span></button>
+        </div>
+      </section>
+
+      <section class="characters-directory" id="charactersDirectory">
+        {% for character in characters %}
+          <article class="directory-character-card"
+                   data-importance="{{ character.importance }}"
+                   data-search="{{ character.name }} {{ character.original_name }} {{ character.role }} {{ character.race }}">
+            <a class="directory-character-image" href="{{ character.get_absolute_url }}">
+              {% if character.portrait_path %}
+                <img src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
+              {% else %}
+                <span>{{ character.name|slice:":1" }}</span>
+              {% endif %}
+            </a>
+            <div class="directory-character-body">
+              <span class="directory-character-kind">{{ character.get_importance_display }}</span>
+              <h2><a href="{{ character.get_absolute_url }}">{{ character.name }}</a></h2>
+              {% if character.original_name %}<p>{{ character.original_name }}</p>{% endif %}
+              <dl>
+                {% if character.role %}<div><dt>Роль</dt><dd>{{ character.role }}</dd></div>{% endif %}
+                <div><dt>Пол</dt><dd>{{ character.get_gender_display }}</dd></div>
+                {% if character.race %}<div><dt>Раса</dt><dd>{{ character.race }}</dd></div>{% endif %}
+              </dl>
+              <a class="directory-character-open" href="{{ character.get_absolute_url }}">Открыть профиль →</a>
+            </div>
+            {% if can_manage %}
+              <form method="post" action="{% url 'photos:character_delete' title.slug character.slug %}" onsubmit="return confirm('Удалить персонажа «{{ character.name|escapejs }}»?');">
+                {% csrf_token %}
+                <button class="character-delete" type="submit" title="Удалить">×</button>
+              </form>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="title-characters-empty">
+            <strong>Состав пока не заполнен</strong>
+            <p>Добавьте персонажей этого тайтла.</p>
+          </div>
+        {% endfor %}
+        <div class="characters-filter-empty" id="charactersFilterEmpty" hidden>
+          <strong>Ничего не найдено</strong>
+          <p>Попробуйте изменить запрос или фильтр.</p>
+        </div>
+      </section>
+
+      {% if can_manage %}
+        <section class="directory-add-panel" id="add-character">
+          <div class="directory-add-heading">
+            <div>
+              <span class="character-page-eyebrow">Новая запись</span>
+              <h2>Добавить персонажа</h2>
+              <p>Основные данные обязательны, остальные разделы можно заполнить позже.</p>
+            </div>
+            <button type="button" id="toggleAddCharacter" aria-expanded="{% if form.is_bound or request.GET.add %}true{% else %}false{% endif %}">
+              {% if form.is_bound or request.GET.add %}Свернуть{% else %}Открыть форму{% endif %}
+            </button>
+          </div>
+
+          <form method="post" enctype="multipart/form-data"
+                class="directory-character-form{% if not form.is_bound and not request.GET.add %} is-collapsed{% endif %}"
+                id="directoryCharacterForm" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="character-form-alert">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="directory-form-preview">
+              <span id="directoryPreviewAvatar"><span>?</span><img alt="" hidden></span>
+              <div><strong id="directoryPreviewName">Новый персонаж</strong><small id="directoryPreviewMeta">Основная информация</small></div>
+            </div>
+            <div class="character-form-grid">
+              {% for field in form %}
+                {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" or field.name == "portrait_upload" %}
+                  <div class="character-field{% if field.name == "name" or field.name == "portrait_upload" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span>*</span>{% endif %}</label>
+                    {{ field }}
+                    {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+                    {{ field.errors }}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            <details class="directory-form-details">
+              <summary>Внешность и подробное описание <span>необязательно</span></summary>
+              <div class="character-form-grid">
+                {% for field in form %}
+                  {% if field.name == "height" or field.name == "weight" or field.name == "eye_color" or field.name == "hair_color" or field.name == "bust" or field.name == "waist" or field.name == "hips" or field.name == "body" or field.name == "features" or field.name == "abilities" or field.name == "notes" %}
+                    <div class="character-field{% if field.name == "body" or field.name == "features" or field.name == "abilities" or field.name == "notes" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
+                      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                      {{ field }}
+                      {{ field.errors }}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </details>
+
+            <details class="directory-form-details">
+              <summary>Медиатека <span>автоматически</span></summary>
+              <div class="character-form-grid">
+                <div class="character-field character-field-wide"><label for="{{ form.portrait_path.id_for_label }}">{{ form.portrait_path.label }}</label>{{ form.portrait_path }}</div>
+                <div class="character-field character-field-wide"><label for="{{ form.gallery_folder.id_for_label }}">{{ form.gallery_folder.label }}</label>{{ form.gallery_folder }}</div>
+                <label class="character-gallery-toggle">{{ form.create_gallery }}<span><strong>{{ form.create_gallery.label }}</strong><small>Создать папку по структуре тайтла</small></span></label>
+              </div>
+            </details>
+
+            <button class="btn btn-success directory-create-submit" type="submit">Создать персонажа</button>
+          </form>
+        </section>
+      {% endif %}
+    </main>
+
+    <script>
+      const directoryCards = [...document.querySelectorAll(".directory-character-card")];
+      const search = document.querySelector("#directorySearch");
+      const filters = [...document.querySelectorAll("[data-filter]")];
+      const empty = document.querySelector("#charactersFilterEmpty");
+      let activeFilter = "all";
+
+      const filterCharacters = () => {
+        const query = search.value.trim().toLocaleLowerCase("ru");
+        let visible = 0;
+        directoryCards.forEach((card) => {
+          const matchesFilter = activeFilter === "all" || card.dataset.importance === activeFilter;
+          const matchesSearch = !query || card.dataset.search.toLocaleLowerCase("ru").includes(query);
+          card.hidden = !(matchesFilter && matchesSearch);
+          if (!card.hidden) visible += 1;
+        });
+        empty.hidden = visible > 0;
+      };
+
+      search.addEventListener("input", filterCharacters);
+      filters.forEach((button) => button.addEventListener("click", () => {
+        filters.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        activeFilter = button.dataset.filter;
+        filterCharacters();
+      }));
+
+      const addToggle = document.querySelector("#toggleAddCharacter");
+      const addForm = document.querySelector("#directoryCharacterForm");
+      addToggle?.addEventListener("click", () => {
+        const collapsed = addForm.classList.toggle("is-collapsed");
+        addToggle.textContent = collapsed ? "Открыть форму" : "Свернуть";
+        addToggle.setAttribute("aria-expanded", String(!collapsed));
+      });
+
+      if (addForm) {
+        const name = addForm.elements.name;
+        const role = addForm.elements.role;
+        const original = addForm.elements.original_name;
+        const portrait = addForm.elements.portrait_upload;
+        const previewName = document.querySelector("#directoryPreviewName");
+        const previewMeta = document.querySelector("#directoryPreviewMeta");
+        const preview = document.querySelector("#directoryPreviewAvatar");
+        let previewUrl = "";
+        const updatePreview = () => {
+          previewName.textContent = name.value.trim() || "Новый персонаж";
+          previewMeta.textContent = [original.value.trim(), role.value.trim()].filter(Boolean).join(" · ") || "Основная информация";
+          preview.querySelector("span").textContent = name.value.trim().charAt(0).toUpperCase() || "?";
+        };
+        [name, role, original].forEach((field) => field.addEventListener("input", updatePreview));
+        portrait.addEventListener("change", () => {
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          previewUrl = portrait.files[0] ? URL.createObjectURL(portrait.files[0]) : "";
+          preview.querySelector("img").src = previewUrl;
+          preview.querySelector("img").hidden = !previewUrl;
+          preview.querySelector("span").hidden = Boolean(previewUrl);
+        });
+        updatePreview();
+      }
+    </script>
+  </body>
+</html>
