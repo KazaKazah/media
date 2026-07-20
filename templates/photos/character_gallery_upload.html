@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Добавить фото — {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery-albums1">
   </head>
   <body class="character-upload-page">
     <main class="character-upload-shell">
@@ -27,12 +27,29 @@
         <form method="post" enctype="multipart/form-data" id="characterPhotoUpload">
           {% csrf_token %}
           <input type="hidden" name="folder" value="{{ current_folder }}">
+          <section class="character-upload-sources">
+            <label class="character-upload-source primary" for="characterPhotos">
+              <span aria-hidden="true">▧</span>
+              <strong>Выбрать отдельные фото</strong>
+              <small>Откроется системная галерея Android</small>
+              <input id="characterPhotos" name="photos" type="file" accept="image/*" multiple>
+            </label>
+            <label class="character-upload-source" for="characterPhotoFolder">
+              <span aria-hidden="true">▰</span>
+              <strong>Выбрать папку или альбом</strong>
+              <small>Через «Мои файлы» — все фото из выбранной папки</small>
+              <input id="characterPhotoFolder" name="photos" type="file" accept="image/*" webkitdirectory directory multiple>
+            </label>
+          </section>
+
           <label class="character-upload-drop" for="characterPhotos" id="characterUploadDrop">
             <span aria-hidden="true">＋</span>
-            <strong>Выберите или перетащите фотографии</strong>
-            <small>Можно выбрать несколько JPG, PNG, GIF, WEBP или AVIF</small>
-            <input id="characterPhotos" name="photos" type="file" accept="image/*" multiple required>
+            <strong>Также можно перетащить фотографии сюда</strong>
+            <small>JPG, PNG, GIF, WEBP или AVIF</small>
           </label>
+          <p class="character-upload-device-note">
+            Веб-сайт не управляет вкладками системной галереи Samsung. Если в общей ленте трудно найти фото, используйте кнопку «Выбрать папку или альбом».
+          </p>
 
           <div class="character-upload-preview" id="characterUploadPreview" hidden>
             <div><strong id="characterUploadCount"></strong><button id="characterUploadClear" type="button">Очистить</button></div>
@@ -50,6 +67,7 @@
     <script>
       const form = document.querySelector("#characterPhotoUpload");
       const input = document.querySelector("#characterPhotos");
+      const folderInput = document.querySelector("#characterPhotoFolder");
       const drop = document.querySelector("#characterUploadDrop");
       const panel = document.querySelector("#characterUploadPreview");
       const grid = document.querySelector("#characterUploadGrid");
@@ -64,10 +82,15 @@
       };
       const renderFiles = () => {
         clearPreviews();
-        const files = [...input.files];
+        const files = [...input.files, ...folderInput.files].filter((file) =>
+          file.type.startsWith("image/") || /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i.test(file.name)
+        );
         panel.hidden = files.length === 0;
         submit.disabled = files.length === 0;
-        count.textContent = `Выбрано фото: ${files.length}`;
+        const folderName = folderInput.files[0]?.webkitRelativePath?.split("/")[0] || "";
+        count.textContent = folderName
+          ? `Папка «${folderName}»: ${files.length} фото`
+          : `Выбрано фото: ${files.length}`;
         files.forEach((file) => {
           const url = URL.createObjectURL(file);
           previewUrls.push(url);
@@ -82,9 +105,17 @@
         });
       };
 
-      input.addEventListener("change", renderFiles);
+      input.addEventListener("change", () => {
+        folderInput.value = "";
+        renderFiles();
+      });
+      folderInput.addEventListener("change", () => {
+        input.value = "";
+        renderFiles();
+      });
       document.querySelector("#characterUploadClear").addEventListener("click", () => {
         input.value = "";
+        folderInput.value = "";
         renderFiles();
       });
       ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => {
@@ -97,6 +128,7 @@
         const transfer = new DataTransfer();
         [...event.dataTransfer.files].filter((file) => file.type.startsWith("image/")).forEach((file) => transfer.items.add(file));
         input.files = transfer.files;
+        folderInput.value = "";
         renderFiles();
       });
       form.addEventListener("submit", () => {

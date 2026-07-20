@@ -566,11 +566,16 @@ def character_gallery_upload(request, character_id, character_slug):
     error = ""
     selected_files = []
     if request.method == "POST":
-        selected_files = request.FILES.getlist("photos")
-        if not selected_files:
+        uploaded_files = request.FILES.getlist("photos")
+        selected_files = [
+            upload
+            for upload in uploaded_files
+            if Path(upload.name).suffix.lower() in library.IMAGE_EXTENSIONS
+        ]
+        if not uploaded_files:
             error = "Выберите хотя бы одно изображение."
-        elif any(Path(upload.name).suffix.lower() not in library.IMAGE_EXTENSIONS for upload in selected_files):
-            error = "Можно загружать только изображения."
+        elif not selected_files:
+            error = "В выбранной папке нет поддерживаемых изображений."
         else:
             result = library.save_uploaded_files(current_rel, selected_files)
             if result["saved"]:

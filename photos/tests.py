@@ -148,6 +148,15 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertContains(response, "Арты")
         self.assertContains(response, "Добавить фото")
 
+        nested = self.client.get(
+            f"{character.get_absolute_url()}gallery/",
+            {"folder": "Арты"},
+        )
+
+        self.assertEqual(nested.status_code, 200)
+        self.assertContains(nested, "art.jpg")
+        self.assertContains(nested, "Арты")
+
     def test_gallery_upload_returns_to_character_profile(self):
         character = Character.objects.create(
             title=self.title,
@@ -157,10 +166,11 @@ class CharacterCreateExperienceTests(TestCase):
         gallery = Path(self.temp_media.name) / character.gallery_folder
         gallery.mkdir(parents=True)
         photo = SimpleUploadedFile("new-photo.jpg", b"image", content_type="image/jpeg")
+        ignored = SimpleUploadedFile("album-notes.txt", b"notes", content_type="text/plain")
 
         response = self.client.post(
             f"{character.get_absolute_url()}gallery/upload/",
-            {"photos": photo},
+            {"photos": [photo, ignored]},
         )
 
         self.assertRedirects(
@@ -168,6 +178,7 @@ class CharacterCreateExperienceTests(TestCase):
             f"{character.get_absolute_url()}?uploaded=1",
         )
         self.assertTrue((gallery / "new-photo.jpg").exists())
+        self.assertFalse((gallery / "album-notes.txt").exists())
 
 
 class TodoListTests(TestCase):

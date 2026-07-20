@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Галерея {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery-albums1">
   </head>
   <body class="character-gallery-page">
     <main class="character-gallery-shell">
@@ -43,7 +43,7 @@
       {% if folders %}
         <section class="character-gallery-folders">
           {% for folder in folders %}
-            <a class="character-gallery-folder" href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ folder.relative|urlencode }}">
+            <a class="character-gallery-folder" data-gallery-folder href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ folder.relative|urlencode }}">
               <span>
                 {% if folder.preview %}
                   <img src="{% url 'photos:thumbnail' 'thumb' folder.preview %}" alt="">
@@ -97,11 +97,32 @@
 
     <script>
       const cards = [...document.querySelectorAll(".character-masonry-card")];
+      const folderLinks = [...document.querySelectorAll("[data-gallery-folder]")];
       const viewer = document.querySelector("#characterGalleryViewer");
       const stage = document.querySelector("#galleryViewerStage");
       const viewerName = document.querySelector("#galleryViewerName");
       const viewerCounter = document.querySelector("#galleryViewerCounter");
       let currentIndex = 0;
+
+      // Some Samsung Internet versions keep :hover after the first tap on a
+      // card. Handle a clean tap explicitly, but leave vertical swipes alone.
+      folderLinks.forEach((link) => {
+        let touchStart = null;
+        link.addEventListener("touchstart", (event) => {
+          const touch = event.changedTouches[0];
+          touchStart = { x: touch.clientX, y: touch.clientY };
+        }, { passive: true });
+        link.addEventListener("touchend", (event) => {
+          if (!touchStart) return;
+          const touch = event.changedTouches[0];
+          const distance = Math.hypot(touch.clientX - touchStart.x, touch.clientY - touchStart.y);
+          touchStart = null;
+          if (distance > 12) return;
+          event.preventDefault();
+          window.location.assign(link.href);
+        }, { passive: false });
+        link.addEventListener("touchcancel", () => { touchStart = null; });
+      });
 
       const showMedia = (index) => {
         if (!cards.length) return;
