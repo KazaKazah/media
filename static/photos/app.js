@@ -19,6 +19,8 @@ const state = {
   selectedType: "",
   filter: "",
   searchMode: false,
+  mediaType: "all",
+  sort: "newest",
   searchRequestId: 0,
   fileCount: 0,
   nextOffset: 0,
@@ -34,7 +36,17 @@ const state = {
 const elements = {
   mediaRoot: document.querySelector("#mediaRoot"),
   tree: document.querySelector("#tree"),
-  currentPath: document.querySelector("#currentPath"),
+  breadcrumbs: document.querySelector("#mediaBreadcrumbs"),
+  folderCount: document.querySelector("#mediaFolderCount"),
+  fileCount: document.querySelector("#mediaFileCount"),
+  viewToggle: document.querySelector("#mediaViewToggle"),
+  typeFilters: [...document.querySelectorAll("[data-media-type]")],
+  sort: document.querySelector("#mediaSort"),
+  dropTargetName: document.querySelector("#dropTargetName"),
+  sidebar: document.querySelector("#mediaSidebar"),
+  sidebarOpen: document.querySelector("#mediaSidebarOpen"),
+  sidebarClose: document.querySelector("#mediaSidebarClose"),
+  sidebarBackdrop: document.querySelector("#mediaSidebarBackdrop"),
   folderRow: document.querySelector("#folderRow"),
   gallery: document.querySelector("#gallery"),
   inspector: document.querySelector("#inspector"),
@@ -110,6 +122,46 @@ async function apiForm(path, formData) {
 
 function formatPath(value) {
   return value ? `/${value}` : "/";
+}
+
+function formatFileSize(bytes = 0) {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} МБ`;
+}
+
+function formatModified(timestamp) {
+  return timestamp ? new Intl.DateTimeFormat("ru", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(timestamp * 1000)) : "";
+}
+
+function renderMediaLocation(label = "") {
+  elements.breadcrumbs.replaceChildren();
+  if (label) {
+    const current = document.createElement("strong");
+    current.textContent = label;
+    elements.breadcrumbs.append(current);
+  } else {
+    const root = document.createElement("button");
+    root.type = "button";
+    root.textContent = "Медиатека";
+    root.addEventListener("click", () => loadFolder(""));
+    elements.breadcrumbs.append(root);
+    let path = "";
+    state.currentPath.split("/").filter(Boolean).forEach((part) => {
+      path = path ? `${path}/${part}` : part;
+      const target = path;
+      const divider = document.createElement("span");
+      divider.textContent = "›";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = part;
+      button.addEventListener("click", () => loadFolder(target));
+      elements.breadcrumbs.append(divider, button);
+    });
+  }
+  elements.folderCount.textContent = `${state.folders.length} папок`;
+  elements.fileCount.textContent = `${state.fileCount} файлов`;
+  elements.dropTargetName.textContent = formatPath(state.currentPath);
 }
 
 function escapeHtml(value) {
@@ -415,7 +467,14 @@ function matchesFilter(file) {
 }
 
 function visibleFiles() {
-  return state.files.filter(matchesFilter);
+  const files = state.files.filter((file) =>
+    matchesFilter(file) && (state.mediaType === "all" || file.type === state.mediaType)
+  );
+  return files.sort((left, right) => {
+    if (state.sort === "name") return left.name.localeCompare(right.name, "ru", { numeric: true });
+    if (state.sort === "oldest") return left.modified - right.modified;
+    return right.modified - left.modified;
+  });
 }
 
 function createMediaCard(file, { featured = false } = {}) {
@@ -445,6 +504,7 @@ function createMediaCard(file, { featured = false } = {}) {
       <span class="media-body">
         ${badge}
         <span class="fw-semibold media-name" title="${escapeAttr(file.name)}">${escapeHtml(file.name)}</span>
+        <span class="media-file-meta"><small>${file.type === "video" ? "Видео" : "Фото"}</small><small>${formatFileSize(file.size)}</small><small>${formatModified(file.modified)}</small></span>
         <span class="tag-list mt-2">${tags}</span>
       </span>
     </button>
@@ -868,7 +928,7 @@ function applyFolderPayload(payload, append = false) {
   state.nextOffset = payload.nextOffset || state.files.length;
   state.hasMore = Boolean(payload.hasMore);
   state.currentCover = append ? state.currentCover : (payload.cover || "");
-  elements.currentPath.textContent = formatPath(state.currentPath);
+  renderMediaLocation();
   renderUploadPreview();
 }
 
@@ -883,6 +943,7 @@ async function loadFolder(folderPath = "", updateTree = true) {
   renderGallery();
   renderInspector();
   if (updateTree) renderTree();
+  document.body.classList.remove("media-sidebar-open");
 }
 
 function applySearchPayload(payload) {
@@ -895,7 +956,7 @@ function applySearchPayload(payload) {
   state.hasMore = false;
   state.selected = null;
   state.selectedType = "";
-  elements.currentPath.textContent = `Поиск: ${payload.query || state.filter.trim()}`;
+  renderMediaLocation(`Поиск: ${payload.query || state.filter.trim()}`);
   renderFolders();
   renderGallery();
   renderInspector(
@@ -949,6 +1010,9 @@ async function loadMoreFiles(options = {}) {
 }
 
 async function boot() {
+  const compact = localStorage.getItem("dropandtag.compactView") === "1";
+  document.body.classList.toggle("media-compact-view", compact);
+  elements.viewToggle.textContent = compact ? "Крупно" : "Компактно";
   const config = await api("/api/config/");
   elements.mediaRoot.textContent = config.mediaRoot;
   await loadTree();
@@ -970,6 +1034,24 @@ elements.refreshTree.addEventListener("click", async () => {
 
 elements.collapseTree.addEventListener("click", collapseTreeToCurrentPath);
 elements.createFolder.addEventListener("click", () => askCreateFolder(state.currentPath));
+elements.typeFilters.forEach((button) => button.addEventListener("click", () => {
+  state.mediaType = button.dataset.mediaType;
+  elements.typeFilters.forEach((item) => item.classList.toggle("active", item === button));
+  renderGallery();
+}));
+elements.sort.addEventListener("change", () => {
+  state.sort = elements.sort.value;
+  renderGallery();
+});
+const toggleSidebar = (open) => document.body.classList.toggle("media-sidebar-open", open);
+elements.sidebarOpen.addEventListener("click", () => toggleSidebar(true));
+elements.sidebarClose.addEventListener("click", () => toggleSidebar(false));
+elements.sidebarBackdrop.addEventListener("click", () => toggleSidebar(false));
+elements.viewToggle.addEventListener("click", () => {
+  const compact = document.body.classList.toggle("media-compact-view");
+  localStorage.setItem("dropandtag.compactView", compact ? "1" : "0");
+  elements.viewToggle.textContent = compact ? "Крупно" : "Компактно";
+});
 elements.siteImportForm.addEventListener("submit", importSiteImages);
 elements.uploadSelectFiles.addEventListener("click", () => elements.uploadFileInput.click());
 elements.uploadFileInput.addEventListener("change", (event) => {
@@ -1004,6 +1086,7 @@ elements.viewerPrev.addEventListener("click", async () => stepViewer(-1));
 elements.viewerNext.addEventListener("click", async () => stepViewer(1));
 
 window.addEventListener("keydown", async (event) => {
+  if (event.key === "Escape") document.body.classList.remove("media-sidebar-open");
   if (state.viewerIndex < 0) return;
   if (event.key === "ArrowLeft") {
     event.preventDefault();

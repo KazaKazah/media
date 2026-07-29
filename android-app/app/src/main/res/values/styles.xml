@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.DropAndTag" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#198754</item>
+        <item name="android:navigationBarColor">#13251D</item>
+        <item name="android:statusBarColor">#13251D</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

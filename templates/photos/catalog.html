@@ -28,7 +28,7 @@
             <a class="btn btn-outline-success" href="{% url 'photos:documents' %}">Документы</a>
           {% endif %}
           {% if can_manage %}
-            <button class="btn btn-success" type="button" data-bs-toggle="collapse" data-bs-target="#createTitlePanel" aria-expanded="false" aria-controls="createTitlePanel">Добавить</button>
+            <button class="btn btn-success" type="button" data-modal-open="createTitleModal">Добавить</button>
             <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}">Медиатека</a>
           {% endif %}
           {% if request.user.is_authenticated %}
@@ -50,19 +50,22 @@
       </section>
 
       {% if can_manage %}
-        <section class="collapse" id="createTitlePanel">
-          <div class="catalog-form-panel title-create-panel">
-            <div>
-              <h2>Новая карточка</h2>
-              <p>Создайте тайтл, затем добавьте персонажей и привяжите папки галерей.</p>
-            </div>
-            <form method="post" class="stack-form compact-title-form">
+        <dialog class="app-modal" id="createTitleModal" {% if form.is_bound %}data-auto-open="true"{% endif %}>
+          <div class="app-modal-card">
+            <header class="app-modal-header">
+              <div><small>Новая запись</small><h2>Добавить тайтл</h2></div>
+              <div class="app-modal-top-actions">
+                <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+                <button class="btn btn-success" type="submit" form="createTitleForm">Создать</button>
+                <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+              </div>
+            </header>
+            <form method="post" class="stack-form compact-title-form app-modal-body" id="createTitleForm">
               {% csrf_token %}
               {{ form.as_p }}
-              <button class="btn btn-success" type="submit">Создать</button>
             </form>
           </div>
-        </section>
+        </dialog>
       {% endif %}
 
       <section class="catalog-tools">
@@ -120,6 +123,6 @@
         {% endfor %}
       </section>
     </main>
-    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'photos/modals.js' %}"></script>
   </body>
 </html>

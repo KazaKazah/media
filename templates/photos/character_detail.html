@@ -43,6 +43,7 @@
       <section class="character-detail-grid character-studio">
         <aside class="character-profile character-studio-profile">
           <div class="character-large-portrait" id="characterPortraitStage">
+            {% if can_manage %}<div class="character-portrait-drop-hint" id="characterPortraitDropHint"><strong>Отпустите фото здесь</strong><small>Оно станет портретом персонажа</small></div>{% endif %}
             {% if character.portrait_path %}
               <img id="characterPortraitImage" src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
             {% else %}
@@ -248,6 +249,37 @@
           if (portraitInitial) portraitInitial.hidden = Boolean(portraitPreviewUrl);
           portraitForm.querySelector("button").disabled = !file;
         });
+
+        const portraitStage = document.querySelector("#characterPortraitStage");
+        if (portraitStage && portraitInput) {
+          ["dragenter", "dragover"].forEach((eventName) => portraitStage.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if ([...event.dataTransfer.items].some((item) => item.kind === "file")) {
+              event.dataTransfer.dropEffect = "copy";
+              portraitStage.classList.add("is-portrait-dragging");
+            }
+          }));
+          ["dragleave", "dragend"].forEach((eventName) => portraitStage.addEventListener(eventName, () => {
+            portraitStage.classList.remove("is-portrait-dragging");
+          }));
+          portraitStage.addEventListener("drop", (event) => {
+            event.preventDefault();
+            portraitStage.classList.remove("is-portrait-dragging");
+            const image = [...event.dataTransfer.files].find((file) =>
+              file.type.startsWith("image/") || /\.(avif|gif|heic|heif|jpe?g|png|webp)$/i.test(file.name)
+            );
+            if (!image) {
+              window.alert("Перетащите файл изображения.");
+              return;
+            }
+            const transfer = new DataTransfer();
+            transfer.items.add(image);
+            portraitInput.files = transfer.files;
+            portraitInput.dispatchEvent(new Event("change", { bubbles: true }));
+            portraitForm.querySelector("button").textContent = "Загружаю…";
+            window.setTimeout(() => portraitForm.requestSubmit(), 250);
+          });
+        }
 
         if (editorForm) {
           const fields = [...editorForm.querySelectorAll("input:not([type=hidden]), select, textarea")];

@@ -20,7 +20,7 @@
           <span class="todo-user-tools">♢</span>
         </div>
 
-        <button class="todo-add-button" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-expanded="false" aria-controls="quickAdd">
+        <button class="todo-add-button" type="button" data-modal-open="quickAddModal">
           <span>+</span> Добавить задачу
         </button>
 
@@ -133,12 +133,17 @@
           </div>
         </section>
 
-        <section class="collapse todo-quick-add" id="quickAdd">
-          <div class="todo-panel-heading">
-            <strong>Быстро добавить</strong>
-            <span>Установите срок и приоритет, чтобы ничего не затерялось.</span>
-          </div>
-          <form method="post">
+        <dialog class="app-modal app-modal-wide" id="quickAddModal">
+          <div class="app-modal-card app-modal-card-wide">
+            <header class="app-modal-header">
+              <div><small>Новая запись</small><h2>Добавить задачу</h2></div>
+              <div class="app-modal-top-actions">
+                <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+                <button class="btn btn-success" type="submit" form="quickAddForm">Добавить</button>
+                <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+              </div>
+            </header>
+          <form method="post" class="app-modal-body" id="quickAddForm">
             {% csrf_token %}
             <input type="hidden" name="action" value="create_item">
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -163,10 +168,10 @@
                 Закрепить
               </label>
               <textarea class="form-control" name="body" rows="2" placeholder="Описание, ссылки или дополнительная информация"></textarea>
-              <button class="btn btn-success" type="submit">Добавить</button>
             </div>
           </form>
-        </section>
+          </div>
+        </dialog>
 
         <form class="todo-filters" method="get">
           <input type="hidden" name="view" value="{{ view }}">
@@ -368,13 +373,13 @@
               <p>Создайте новую запись или измените фильтры и поиск.</p>
             </div>
           {% endfor %}
-          <button class="todo-inline-add" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdd" aria-controls="quickAdd">
+          <button class="todo-inline-add" type="button" data-modal-open="quickAddModal">
             <span>+</span> Добавить задачу
           </button>
         </section>
         {% endif %}
       </main>
     </div>
-    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'photos/modals.js' %}"></script>
   </body>
 </html>

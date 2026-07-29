@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
@@ -7,6 +8,7 @@ from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.db.models import Case, Count, IntegerField, Q, When
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -559,25 +561,50 @@ def character_gallery_upload(request, character_id, character_slug):
         character.gallery_folder = ensure_media_folder(default_character_gallery(character))
         character.save(update_fields=["gallery_folder", "updated_at"])
 
-    _, _, subfolder, current_rel = character_gallery_location(
+    base_rel, _, subfolder, current_rel = character_gallery_location(
         character,
         request.GET.get("folder", "") if request.method == "GET" else request.POST.get("folder", ""),
     )
     error = ""
-    selected_files = []
     if request.method == "POST":
+        action = request.POST.get("action", "upload")
+        new_folder_name = request.POST.get("new_folder", "").strip()
+        if action == "create_folder":
+            if not new_folder_name:
+                error = "Введите название новой папки."
+            else:
+                try:
+                    created = library.create_folder(current_rel, new_folder_name)
+                    created_subfolder = created["path"][len(base_rel):].lstrip("/")
+                    return redirect(
+                        f"{reverse('photos:character_gallery_upload', args=[character.pk, character.slug])}"
+                        f"?folder={quote(created_subfolder)}&created=1"
+                    )
+                except (ValueError, OSError, SuspiciousFileOperation) as create_error:
+                    error = str(create_error)
+
         uploaded_files = request.FILES.getlist("photos")
         selected_files = [
             upload
             for upload in uploaded_files
             if Path(upload.name).suffix.lower() in library.IMAGE_EXTENSIONS
         ]
-        if not uploaded_files:
+        upload_target = current_rel
+        if action == "upload" and new_folder_name:
+            try:
+                upload_target = library.create_folder(current_rel, new_folder_name)["path"]
+            except (ValueError, OSError, SuspiciousFileOperation) as create_error:
+                error = str(create_error)
+        if action != "upload":
+            pass
+        elif error:
+            pass
+        elif not uploaded_files:
             error = "Выберите хотя бы одно изображение."
         elif not selected_files:
             error = "В выбранной папке нет поддерживаемых изображений."
         else:
-            result = library.save_uploaded_files(current_rel, selected_files)
+            result = library.save_uploaded_files(upload_target, selected_files)
             if result["saved"]:
                 return redirect(f"{character.get_absolute_url()}?uploaded={len(result['saved'])}")
             error = "Не удалось сохранить выбранные изображения."

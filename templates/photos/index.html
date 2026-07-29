@@ -10,13 +10,14 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar border-end">
+      <aside class="sidebar border-end" id="mediaSidebar">
         <div class="d-flex align-items-center gap-3 p-3">
           <div class="brand-mark">DT</div>
           <div class="min-w-0">
             <h1 class="h5 mb-0">Drop and Tag</h1>
             <div class="small text-secondary text-truncate" id="mediaRoot">NAS photo library</div>
           </div>
+          <button class="media-sidebar-close" id="mediaSidebarClose" type="button" aria-label="Закрыть папки">×</button>
         </div>
         <div class="px-3 pb-3 d-grid gap-2">
           <a class="btn btn-outline-success w-100" href="{% url 'photos:todo' %}">To-Do List</a>
@@ -35,21 +36,41 @@
       </aside>
 
       <main class="workspace">
+        <button class="media-mobile-folders" id="mediaSidebarOpen" type="button"><span>☰</span> Папки</button>
         <header class="workspace-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3">
           <div>
             <div class="text-uppercase small text-secondary">Текущая папка</div>
-            <h2 class="h3 mb-0 path-heading" id="currentPath">/</h2>
+            <nav class="media-breadcrumbs" id="mediaBreadcrumbs" aria-label="Путь медиатеки"></nav>
+            <div class="media-folder-summary"><span id="mediaFolderCount">0 папок</span><span id="mediaFileCount">0 файлов</span></div>
           </div>
           <div class="toolbar">
+            <button class="btn btn-outline-secondary media-view-toggle" id="mediaViewToggle" type="button" title="Изменить размер карточек">Компактно</button>
             <button class="btn btn-success" id="createFolder" type="button">Создать папку</button>
             <input class="form-control" id="search" type="search" placeholder="Поиск по всей медиатеке">
           </div>
         </header>
 
+        <section class="media-command-bar">
+          <div class="media-type-filters" id="mediaTypeFilters" aria-label="Тип файлов">
+            <button class="active" type="button" data-media-type="all">Все</button>
+            <button type="button" data-media-type="image">Фото</button>
+            <button type="button" data-media-type="video">Видео</button>
+          </div>
+          <label class="media-sort">
+            <span>Сортировка</span>
+            <select class="form-select" id="mediaSort">
+              <option value="newest">Сначала новые</option>
+              <option value="oldest">Сначала старые</option>
+              <option value="name">По названию</option>
+            </select>
+          </label>
+        </section>
+
         <section class="drop-zone rounded-3 p-3 mb-3" id="dropZone">
           <div>
-            <strong>Перетащите сюда фото, видео или элемент из приложения</strong>
-            <div class="text-secondary">Файлы с компьютера загрузятся в текущую папку, элементы из приложения будут перенесены.</div>
+            <span class="media-upload-icon">↑</span>
+            <span><strong>Перетащите фото и видео сюда</strong>
+            <small>Загрузка в <b id="dropTargetName">/</b> · либо перенесите сюда карточку из другой папки</small></span>
           </div>
           <div class="drop-zone-actions">
             <button class="btn btn-success" id="uploadSelectFiles" type="button">Выбрать фото</button>
@@ -99,6 +120,7 @@
       </main>
     </div>
 
+    <button class="media-sidebar-backdrop" id="mediaSidebarBackdrop" type="button" aria-label="Закрыть меню"></button>
     <div class="modal fade" id="viewerModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-fullscreen">
         <div class="modal-content viewer-modal">
@@ -126,6 +148,6 @@
     </div>
 
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    <script src="{% static 'photos/app.js' %}?v=performance-1"></script>
+    <script src="{% static 'photos/app.js' %}?v=media-ux-2"></script>
   </body>
 </html>

@@ -15,18 +15,39 @@
         <a href="{% url 'photos:character_gallery' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Просмотр галереи</a>
       </nav>
 
-      <section class="character-upload-card">
-        <header>
-          <span class="character-page-eyebrow">{{ character.title.name }}</span>
-          <h1>Добавить фото</h1>
-          <p>{{ character.name }}{% if current_folder %} · {{ current_folder }}{% endif %}</p>
+      <section class="character-upload-card" role="dialog" aria-modal="true" aria-labelledby="characterUploadTitle">
+        <header class="character-upload-modal-head">
+          <div>
+            <span class="character-page-eyebrow">{{ character.title.name }}</span>
+            <h1 id="characterUploadTitle">Добавить фото</h1>
+            <p>{{ character.name }}{% if current_folder %} · {{ current_folder }}{% endif %}</p>
+          </div>
+          <div class="character-upload-head-actions">
+            <a class="btn btn-outline-secondary" href="{{ character.get_absolute_url }}">Отменить</a>
+            <button class="btn btn-success" id="characterUploadSubmit" type="submit" form="characterPhotoUpload" disabled>Загрузить</button>
+          </div>
         </header>
 
         {% if error %}<div class="character-form-alert">{{ error }}</div>{% endif %}
+        {% if request.GET.created %}<div class="character-folder-created">✓ Папка создана. Сейчас фотографии будут добавлены в неё.</div>{% endif %}
 
         <form method="post" enctype="multipart/form-data" id="characterPhotoUpload">
           {% csrf_token %}
+          <input type="hidden" name="action" value="upload">
           <input type="hidden" name="folder" value="{{ current_folder }}">
+          <section class="character-upload-folder">
+            <div>
+              <span aria-hidden="true">＋</span>
+              <div>
+                <strong>Новая папка в текущем разделе</strong>
+                <small>Оставьте поле пустым, чтобы загрузить фото прямо сюда.</small>
+              </div>
+            </div>
+            <div class="character-upload-folder-controls">
+              <input class="form-control" name="new_folder" id="characterNewFolder" maxlength="120" placeholder="Например: Арты, Косплей, Эпизод 01">
+              <button class="btn btn-outline-success" id="characterCreateFolder" type="button">Создать пустую папку</button>
+            </div>
+          </section>
           <section class="character-upload-sources">
             <label class="character-upload-source primary" for="characterPhotos">
               <span aria-hidden="true">▧</span>
@@ -38,7 +59,7 @@
               <span aria-hidden="true">▰</span>
               <strong>Выбрать папку или альбом</strong>
               <small>Через «Мои файлы» — все фото из выбранной папки</small>
-              <input id="characterPhotoFolder" name="photos" type="file" accept="image/*" webkitdirectory directory multiple>
+              <input id="characterPhotoFolder" name="photos" type="file" accept="image/*,.dropandtag-folder" webkitdirectory directory multiple>
             </label>
           </section>
 
@@ -56,10 +77,6 @@
             <section id="characterUploadGrid"></section>
           </div>
 
-          <div class="character-upload-actions">
-            <a class="btn btn-outline-secondary" href="{{ character.get_absolute_url }}">Отменить</a>
-            <button class="btn btn-success" id="characterUploadSubmit" type="submit" disabled>Загрузить и вернуться к персонажу</button>
-          </div>
         </form>
       </section>
     </main>
@@ -73,6 +90,8 @@
       const grid = document.querySelector("#characterUploadGrid");
       const count = document.querySelector("#characterUploadCount");
       const submit = document.querySelector("#characterUploadSubmit");
+      const newFolder = document.querySelector("#characterNewFolder");
+      const createFolder = document.querySelector("#characterCreateFolder");
       let previewUrls = [];
 
       const clearPreviews = () => {
@@ -135,6 +154,18 @@
         submit.disabled = true;
         submit.textContent = "Загрузка…";
       });
+      createFolder.addEventListener("click", () => {
+        if (!newFolder.value.trim()) {
+          newFolder.focus();
+          newFolder.setCustomValidity("Введите название папки");
+          newFolder.reportValidity();
+          return;
+        }
+        newFolder.setCustomValidity("");
+        form.elements.action.value = "create_folder";
+        form.requestSubmit();
+      });
+      newFolder.addEventListener("input", () => newFolder.setCustomValidity(""));
     </script>
   </body>
 </html>

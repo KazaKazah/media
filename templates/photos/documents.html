@@ -19,6 +19,7 @@
           </div>
         </div>
         <nav class="catalog-nav">
+          <button class="btn btn-success" type="button" data-modal-open="documentUploadModal">Добавить документ</button>
           <a class="btn btn-outline-success" href="{% url 'photos:todo' %}">To-Do List</a>
           <a class="btn btn-outline-success" href="{% url 'photos:index' %}">Тайтлы</a>
           <form method="post" action="{% url 'logout' %}">
@@ -28,18 +29,7 @@
         </nav>
       </header>
 
-      <section class="document-layout">
-        <aside class="document-upload-panel">
-          <h2>Новый документ</h2>
-          <p>Поддерживаются <strong>FB2</strong>, <strong>DOCX</strong>, текстовые <strong>PDF</strong>, <strong>EPUB</strong>, <strong>ODT</strong>, TXT, MD, HTML, XML, CSV, JSON и LOG до 20 МБ.</p>
-          <p class="document-format-note">Старые файлы Word .doc сохраните как .docx. PDF-сканы без текстового слоя не распознаются.</p>
-          <form class="stack-form" method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button class="btn btn-success w-100" type="submit">Загрузить и открыть</button>
-          </form>
-        </aside>
-
+      <section class="document-layout document-layout-wide">
         <section class="document-list-panel">
           <div class="document-list-head">
             <div>
@@ -71,5 +61,23 @@
         </section>
       </section>
     </main>
+    <dialog class="app-modal" id="documentUploadModal" {% if form.is_bound %}data-auto-open="true"{% endif %}>
+      <div class="app-modal-card">
+        <header class="app-modal-header">
+          <div><small>Моя библиотека</small><h2>Новый документ</h2></div>
+          <div class="app-modal-top-actions">
+            <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+            <button class="btn btn-success" type="submit" form="documentUploadForm">Загрузить и открыть</button>
+            <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+          </div>
+        </header>
+        <form class="stack-form app-modal-body" id="documentUploadForm" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <p>Поддерживаются FB2, DOCX, PDF, EPUB, ODT, TXT, MD, HTML, XML, CSV, JSON и LOG до 20 МБ.</p>
+          {{ form.as_p }}
+        </form>
+      </div>
+    </dialog>
+    <script src="{% static 'photos/modals.js' %}"></script>
   </body>
 </html>

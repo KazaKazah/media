@@ -13,7 +13,7 @@
       <nav class="detail-nav">
         <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
         <a href="{% url 'photos:index' %}">Каталог</a>
-        {% if can_manage %}<a href="#add-character">Добавить персонажа</a>{% endif %}
+        {% if can_manage %}<button class="detail-nav-button" type="button" data-modal-open="addCharacterModal">Добавить персонажа</button>{% endif %}
       </nav>
 
       <header class="characters-directory-hero">
@@ -88,20 +88,23 @@
       </section>
 
       {% if can_manage %}
-        <section class="directory-add-panel" id="add-character">
-          <div class="directory-add-heading">
+        <dialog class="app-modal app-modal-wide" id="addCharacterModal" {% if form.is_bound or request.GET.add %}data-auto-open="true"{% endif %}>
+          <div class="app-modal-card app-modal-card-wide">
+          <header class="app-modal-header">
             <div>
               <span class="character-page-eyebrow">Новая запись</span>
               <h2>Добавить персонажа</h2>
               <p>Основные данные обязательны, остальные разделы можно заполнить позже.</p>
             </div>
-            <button type="button" id="toggleAddCharacter" aria-expanded="{% if form.is_bound or request.GET.add %}true{% else %}false{% endif %}">
-              {% if form.is_bound or request.GET.add %}Свернуть{% else %}Открыть форму{% endif %}
-            </button>
-          </div>
+            <div class="app-modal-top-actions">
+              <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+              <button class="btn btn-success" type="submit" form="directoryCharacterForm">Создать персонажа</button>
+              <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+            </div>
+          </header>
 
           <form method="post" enctype="multipart/form-data"
-                class="directory-character-form{% if not form.is_bound and not request.GET.add %} is-collapsed{% endif %}"
+                class="directory-character-form app-modal-body"
                 id="directoryCharacterForm" novalidate>
             {% csrf_token %}
             {% if form.non_field_errors %}<div class="character-form-alert">{{ form.non_field_errors }}</div>{% endif %}
@@ -146,9 +149,9 @@
               </div>
             </details>
 
-            <button class="btn btn-success directory-create-submit" type="submit">Создать персонажа</button>
           </form>
-        </section>
+          </div>
+        </dialog>
       {% endif %}
     </main>
 
@@ -179,13 +182,7 @@
         filterCharacters();
       }));
 
-      const addToggle = document.querySelector("#toggleAddCharacter");
       const addForm = document.querySelector("#directoryCharacterForm");
-      addToggle?.addEventListener("click", () => {
-        const collapsed = addForm.classList.toggle("is-collapsed");
-        addToggle.textContent = collapsed ? "Открыть форму" : "Свернуть";
-        addToggle.setAttribute("aria-expanded", String(!collapsed));
-      });
 
       if (addForm) {
         const name = addForm.elements.name;
@@ -212,5 +209,6 @@
         updatePreview();
       }
     </script>
+    <script src="{% static 'photos/modals.js' %}"></script>
   </body>
 </html>
