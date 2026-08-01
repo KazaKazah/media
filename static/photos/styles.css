@@ -4691,6 +4691,32 @@ body.app-modal-open {
   backdrop-filter: blur(9px);
 }
 
+.title-cover-drop-overlay {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  position: absolute;
+  inset: .55rem;
+  z-index: 6;
+  border: 2px dashed rgba(255,255,255,.82);
+  border-radius: .75rem;
+  padding: 1rem;
+  background: rgba(16, 74, 63, .86);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: scale(.97);
+  transition: opacity .16s ease, transform .16s ease;
+  backdrop-filter: blur(7px);
+}
+
+.title-cover-drop-overlay strong,
+.title-cover-drop-overlay small { display: block; }
+.title-cover-drop-overlay small { color: rgba(255,255,255,.78); font-size: .72rem; }
+.title-hero-poster.is-cover-dragging .title-cover-drop-overlay { opacity: 1; transform: scale(1); }
+.title-hero-poster.is-cover-uploading::after { content: "Загрузка обложки…"; display: grid; place-items: center; position: absolute; inset: 0; z-index: 8; background: rgba(20,31,26,.82); color: white; font-size: .85rem; font-weight: 850; }
+
 .title-catalog-facts {
   display: flex;
   flex-wrap: wrap;

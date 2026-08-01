@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title.name }} — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-title-cover-drop">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -21,7 +21,7 @@
       </nav>
 
       <section class="title-hero">
-        <div class="title-hero-poster{% if title.is_adult and not request.user.is_authenticated %} adult-locked{% endif %}">
+        <div class="title-hero-poster{% if title.is_adult and not request.user.is_authenticated %} adult-locked{% endif %}"{% if can_manage %} id="titleCoverDropTarget"{% endif %}>
           {% if title.is_adult and not request.user.is_authenticated %}
             <span class="adult-poster-mask detail-mask">
               <strong>18+</strong>
@@ -34,6 +34,7 @@
             <span>{{ title.get_kind_display }}</span>
           {% endif %}
           {% if can_manage %}
+            <span class="title-cover-drop-overlay" id="titleCoverDropOverlay"><strong>Отпустите изображение</strong><small>Оно станет обложкой тайтла</small></span>
             <button class="title-cover-change" type="button" data-modal-open="titleCoverModal">Сменить обложку</button>
           {% endif %}
         </div>
@@ -145,12 +146,41 @@
       <script>
         const titleCover = document.querySelector("#titleCover");
         const titleCoverPreview = document.querySelector("#titleCoverPreview");
+        const titleCoverForm = document.querySelector("#titleCoverForm");
+        const titleCoverDropTarget = document.querySelector("#titleCoverDropTarget");
         let titleCoverUrl = "";
-        titleCover?.addEventListener("change", () => {
+        const showTitleCoverPreview = () => {
           if (titleCoverUrl) URL.revokeObjectURL(titleCoverUrl);
           const file = titleCover.files[0];
           titleCoverUrl = file ? URL.createObjectURL(file) : "";
           titleCoverPreview.innerHTML = titleCoverUrl ? `<img src="${titleCoverUrl}" alt="">` : "<span>Предпросмотр обложки</span>";
+        };
+        titleCover?.addEventListener("change", showTitleCoverPreview);
+        ["dragenter", "dragover"].forEach((eventName) => titleCoverDropTarget?.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          titleCoverDropTarget.classList.add("is-cover-dragging");
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+        }));
+        ["dragleave", "dragend"].forEach((eventName) => titleCoverDropTarget?.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          titleCoverDropTarget.classList.remove("is-cover-dragging");
+        }));
+        titleCoverDropTarget?.addEventListener("drop", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          titleCoverDropTarget.classList.remove("is-cover-dragging");
+          const file = [...event.dataTransfer.files].find((item) => item.type.startsWith("image/"));
+          if (!file) {
+            alert("Перетащите файл изображения JPG, PNG, WEBP или GIF.");
+            return;
+          }
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          titleCover.files = transfer.files;
+          showTitleCoverPreview();
+          titleCoverDropTarget.classList.add("is-cover-uploading");
+          titleCoverForm.requestSubmit();
         });
       </script>
     {% endif %}

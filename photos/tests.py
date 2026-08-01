@@ -110,6 +110,23 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertContains(response, "Сразу создать папку галереи")
         self.assertContains(response, 'name="portrait_upload"')
 
+    def test_title_cover_supports_direct_drag_and_drop_upload(self):
+        page = self.client.get(self.title.get_absolute_url())
+
+        self.assertContains(page, 'id="titleCoverDropTarget"')
+        self.assertContains(page, 'titleCoverDropTarget?.addEventListener("drop"')
+        self.assertContains(page, "titleCoverForm.requestSubmit()")
+
+        response = self.client.post(self.title.get_absolute_url(), {
+            "action": "upload_title_cover",
+            "cover": SimpleUploadedFile("dragged-cover.jpg", b"image", content_type="image/jpeg"),
+        })
+
+        self.assertRedirects(response, self.title.get_absolute_url())
+        self.title.refresh_from_db()
+        self.assertTrue(self.title.poster_path.endswith("dragged-cover.jpg"))
+        self.assertTrue((Path(self.temp_media.name) / self.title.poster_path).is_file())
+
     def test_character_can_be_created_with_portrait_and_gallery(self):
         portrait = SimpleUploadedFile(
             "hero.gif",
