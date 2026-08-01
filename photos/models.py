@@ -220,6 +220,8 @@ class TodoItem(models.Model):
     priority = models.CharField("Приоритет", max_length=20, choices=Priority.choices, default=Priority.MEDIUM)
     title = models.CharField("Заголовок", max_length=220)
     body = models.TextField("Текст", blank=True)
+    is_encrypted = models.BooleanField("Зашифрована", default=False)
+    encrypted_body = models.TextField("Зашифрованный текст", blank=True)
     tags = models.CharField("Метки", max_length=240, blank=True)
     due_at = models.DateTimeField("Дата и время", null=True, blank=True)
     is_done = models.BooleanField("Выполнено", default=False)

@@ -30,6 +30,7 @@ from .forms import (
     UserProfileForm,
 )
 from . import library
+from .note_crypto import NoteDecryptionError, decrypt_note, encrypt_note
 from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
 
 
@@ -285,6 +286,147 @@ def todo_home(request):
     })
 
 
+def note_library_url(project_id="", note_id=""):
+    parameters = []
+    if project_id:
+        parameters.append(f"project={project_id}")
+    if note_id:
+        parameters.append(f"note={note_id}")
+    suffix = f"?{'&'.join(parameters)}" if parameters else ""
+    return f"{reverse('photos:todo')}{suffix}"
+
+
+@ensure_csrf_cookie
+@login_required
+def notes_home(request):
+    legacy_actions = {
+        "create_item", "update_item", "toggle_item", "toggle_pin",
+        "delete_item", "clear_completed",
+    }
+    if request.POST.get("action") in legacy_actions or request.GET.get("view"):
+        return todo_home(request)
+    projects = TodoProject.objects.filter(owner=request.user).annotate(
+        note_count=Count("items", filter=Q(items__kind=TodoItem.Kind.NOTE)),
+    )
+    project_id = request.GET.get("project", "")
+    selected_project = projects.filter(pk=project_id).first() if project_id else None
+    query = request.GET.get("q", "").strip()
+    notes = TodoItem.objects.filter(owner=request.user, kind=TodoItem.Kind.NOTE).select_related("project")
+    if selected_project:
+        notes = notes.filter(project=selected_project)
+    elif request.GET.get("uncategorized"):
+        notes = notes.filter(project__isnull=True)
+    if query:
+        notes = notes.filter(Q(title__icontains=query) | Q(tags__icontains=query) | Q(body__icontains=query))
+    notes = notes.order_by("-is_pinned", "-updated_at")
+
+    selected_note_id = request.GET.get("note", "")
+    selected_note = notes.filter(pk=selected_note_id).first() if selected_note_id else notes.first()
+    unlocked_body = None
+    note_error = ""
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "create_project":
+            name = request.POST.get("name", "").strip()
+            if name:
+                project, _ = TodoProject.objects.get_or_create(owner=request.user, name=name)
+                return redirect(note_library_url(project.pk))
+            return redirect("photos:todo")
+
+        if action == "create_note":
+            title = request.POST.get("title", "").strip()
+            body = request.POST.get("body", "")
+            password = request.POST.get("password", "")
+            confirm = request.POST.get("password_confirm", "")
+            requested_project = request.POST.get("project", "")
+            project = projects.filter(pk=requested_project).first() if requested_project else None
+            if not title:
+                note_error = "Укажите название заметки."
+            elif password and password != confirm:
+                note_error = "Пароли не совпадают."
+            else:
+                note = TodoItem(owner=request.user, project=project, kind=TodoItem.Kind.NOTE, title=title)
+                if password:
+                    note.is_encrypted = True
+                    note.encrypted_body = encrypt_note(body, password)
+                    note.body = ""
+                else:
+                    note.body = body
+                note.save()
+                return redirect(note_library_url(project.pk if project else "", note.pk))
+
+        if action in {"unlock_note", "update_note", "delete_note", "toggle_note_pin"}:
+            note = get_object_or_404(TodoItem, pk=request.POST.get("item"), owner=request.user, kind=TodoItem.Kind.NOTE)
+            selected_note = note
+            selected_note_id = str(note.pk)
+            if action == "delete_note":
+                project = note.project_id
+                note.delete()
+                return redirect(note_library_url(project))
+            if action == "toggle_note_pin":
+                note.is_pinned = not note.is_pinned
+                note.save(update_fields=["is_pinned", "updated_at"])
+                return redirect(note_library_url(note.project_id, note.pk))
+            password = request.POST.get("password", "")
+            try:
+                current_body = decrypt_note(note.encrypted_body, password) if note.is_encrypted else note.body
+            except NoteDecryptionError as error:
+                note_error = str(error)
+            else:
+                if action == "unlock_note":
+                    unlocked_body = current_body
+                else:
+                    title = request.POST.get("title", "").strip()
+                    body = request.POST.get("body", "")
+                    requested_project = request.POST.get("project", "")
+                    project = projects.filter(pk=requested_project).first() if requested_project else None
+                    keep_encrypted = bool(request.POST.get("is_encrypted"))
+                    new_password = request.POST.get("new_password", "")
+                    if not title:
+                        note_error = "Укажите название заметки."
+                        unlocked_body = body
+                    elif new_password and new_password != request.POST.get("new_password_confirm", ""):
+                        note_error = "Новые пароли не совпадают."
+                        unlocked_body = body
+                    else:
+                        encryption_password = new_password or password
+                        note.title = title
+                        note.project = project
+                        note.tags = request.POST.get("tags", "").strip()
+                        note.is_pinned = bool(request.POST.get("is_pinned"))
+                        if keep_encrypted:
+                            if not encryption_password:
+                                note_error = "Укажите пароль для зашифрованной заметки."
+                                unlocked_body = body
+                            else:
+                                note.is_encrypted = True
+                                note.encrypted_body = encrypt_note(body, encryption_password)
+                                note.body = ""
+                        else:
+                            note.is_encrypted = False
+                            note.encrypted_body = ""
+                            note.body = body
+                        if not note_error:
+                            note.save()
+                            return redirect(note_library_url(note.project_id, note.pk))
+
+    # Refresh the visible collection after non-redirecting POST actions.
+    notes = list(notes[:300])
+    if selected_note and selected_note.owner_id == request.user.pk:
+        selected_note = next((note for note in notes if note.pk == selected_note.pk), selected_note)
+    return render(request, "photos/notes.html", {
+        "can_manage": user_can_manage(request.user),
+        "note_error": note_error,
+        "notes": notes,
+        "projects": projects,
+        "query": query,
+        "selected_note": selected_note,
+        "selected_project": selected_project,
+        "unlocked_body": unlocked_body,
+    })
+
+
 @login_required
 def document_library(request):
     documents = TextDocument.objects.filter(owner=request.user)
@@ -534,10 +676,37 @@ def title_characters(request, slug):
     title = get_object_or_404(Title, slug=slug)
     form = CharacterCreateForm()
     import_form = CharacterFolderImportForm()
+    bulk_error = ""
     if request.method == "POST":
         if not user_can_manage(request.user):
             raise PermissionDenied("Добавлять персонажей может только администратор")
-        if request.POST.get("action") == "import_character_folders":
+        action = request.POST.get("action", "")
+        if action == "bulk_update_characters":
+            selected_ids = list(dict.fromkeys(request.POST.getlist("characters")))
+            if not selected_ids or any(not value.isdigit() for value in selected_ids):
+                bulk_error = "Выберите хотя бы одного персонажа."
+            elif len(selected_ids) > 500:
+                bulk_error = "За один раз можно изменить не более 500 персонажей."
+            else:
+                updates = {}
+                gender = request.POST.get("bulk_gender", "")
+                importance = request.POST.get("bulk_importance", "")
+                if gender in Character.Gender.values:
+                    updates["gender"] = gender
+                if importance in Character.Importance.values:
+                    updates["importance"] = importance
+                if request.POST.get("apply_role"):
+                    updates["role"] = request.POST.get("bulk_role", "").strip()[:120]
+                if request.POST.get("apply_race"):
+                    updates["race"] = request.POST.get("bulk_race", "").strip()[:160]
+                if not updates:
+                    bulk_error = "Выберите хотя бы одно поле для изменения."
+                else:
+                    characters_to_update = title.characters.filter(pk__in=selected_ids)
+                    updated = characters_to_update.update(**updates, updated_at=timezone.now())
+                    target = reverse("photos:title_characters", kwargs={"slug": title.slug})
+                    return redirect(f"{target}?bulk_updated={updated}")
+        elif action == "import_character_folders":
             import_form = CharacterFolderImportForm(request.POST)
             if import_form.is_valid():
                 try:
@@ -586,6 +755,7 @@ def title_characters(request, slug):
     ).order_by("importance_rank", "name")
     return render(request, "photos/title_characters.html", {
         "can_manage": user_can_manage(request.user),
+        "bulk_error": bulk_error,
         "title": title,
         "form": form,
         "import_form": import_form,
@@ -593,6 +763,11 @@ def title_characters(request, slug):
         "main_characters": characters.filter(importance=Character.Importance.MAIN),
         "supporting_characters": characters.filter(importance=Character.Importance.SUPPORTING),
         "episodic_characters": characters.filter(importance=Character.Importance.EPISODIC),
+        "female_characters": characters.filter(gender=Character.Gender.FEMALE),
+        "male_characters": characters.filter(gender=Character.Gender.MALE),
+        "other_gender_characters": characters.filter(gender=Character.Gender.OTHER),
+        "gender_choices": Character.Gender.choices,
+        "importance_choices": Character.Importance.choices,
     })
 
 
@@ -893,6 +1068,21 @@ def character_gallery(request, character_id, character_slug):
                 source_rel, _ = character_gallery_entry(character, request.POST.get("source", ""))
                 _, _, _, target_rel = character_gallery_location(character, request.POST.get("target", ""))
                 library.move_entry(source_rel, target_rel, request.POST.get("type", "file"))
+            elif action == "gallery_bulk_move":
+                sources = list(dict.fromkeys(request.POST.getlist("sources")))
+                if not sources:
+                    raise ValueError("Выберите хотя бы одну фотографию.")
+                if len(sources) > 500:
+                    raise ValueError("За один раз можно переместить не более 500 файлов.")
+                _, _, _, target_rel = character_gallery_location(character, request.POST.get("target", ""))
+                validated_sources = []
+                for source in sources:
+                    source_rel, source_path = character_gallery_entry(character, source)
+                    if not source_path.is_file() or not library.is_media_file(source_path):
+                        raise ValueError("Выбранный элемент не является фотографией или видео.")
+                    validated_sources.append(source_rel)
+                for source_rel in validated_sources:
+                    library.move_entry(source_rel, target_rel, "file")
             else:
                 raise ValueError("Неизвестная операция с галереей")
         except (ValueError, OSError, SuspiciousFileOperation) as error:
@@ -902,7 +1092,8 @@ def character_gallery(request, character_id, character_slug):
                 "character_id": character.pk,
                 "character_slug": character.slug,
             })
-            suffix = f"?folder={quote(subfolder)}&changed=1" if subfolder else "?changed=1"
+            changed = len(request.POST.getlist("sources")) if action == "gallery_bulk_move" else 1
+            suffix = f"?folder={quote(subfolder)}&changed={changed}" if subfolder else f"?changed={changed}"
             return redirect(f"{target}{suffix}")
     listing = library.list_folder(current_rel, 0, 200)
     files = list(listing["files"])

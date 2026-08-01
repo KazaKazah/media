@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -21,17 +21,10 @@
           <button class="media-sidebar-close" id="mediaSidebarClose" type="button" aria-label="Закрыть папки">×</button>
         </div>
         <div class="px-3 pb-3 d-grid gap-2">
-          <a class="btn btn-outline-success w-100" href="{% url 'photos:todo' %}">To-Do List</a>
-          <a class="btn btn-outline-success w-100" href="{% url 'photos:documents' %}">Документы</a>
-          <a class="btn btn-outline-success w-100" href="{% url 'photos:index' %}">К тайтлам</a>
           <div class="tree-tools">
             <button class="btn btn-outline-light" id="refreshTree" type="button">Обновить</button>
             <button class="btn btn-outline-light" id="collapseTree" type="button">Свернуть</button>
           </div>
-          <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button class="btn btn-outline-warning w-100" type="submit">Выйти</button>
-          </form>
         </div>
         <nav class="tree px-2 pb-3" id="tree"></nav>
       </aside>

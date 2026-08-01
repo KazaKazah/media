@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Галерея {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
   </head>
   <body class="character-gallery-page">
     {% include 'photos/_app_navbar.html' %}
@@ -14,7 +14,6 @@
       <nav class="detail-nav">
         <a href="{{ character.get_absolute_url }}">← {{ character.name }}</a>
         <a href="{% url 'photos:title_characters' character.title.slug %}">Все персонажи</a>
-        <a href="{% url 'photos:media_library' %}?path={{ character.gallery_folder|urlencode }}">Общая медиатека</a>
       </nav>
 
       <header class="character-gallery-hero">
@@ -34,7 +33,7 @@
         </div>{% endif %}
       </header>
 
-      {% if request.GET.changed %}<div class="character-gallery-notice success">Изменения сохранены.</div>{% endif %}
+      {% if request.GET.changed %}<div class="character-gallery-notice success">Изменения сохранены{% if request.GET.changed != '1' %}. Перемещено файлов: {{ request.GET.changed }}{% endif %}.</div>{% endif %}
       {% if operation_error %}<div class="character-gallery-notice error"><strong>Не удалось выполнить действие.</strong> {{ operation_error }}</div>{% endif %}
 
       <nav class="character-gallery-breadcrumbs" aria-label="Путь галереи">
@@ -67,9 +66,20 @@
       {% endif %}
 
       {% if files %}
+        {% if can_manage %}
+          <form class="character-gallery-bulkbar" id="bulkMoveForm" method="post">
+            {% csrf_token %}<input type="hidden" name="action" value="gallery_bulk_move">
+            <label class="bulk-select-all"><input type="checkbox" id="gallerySelectAll"><span>Выбрать все</span></label>
+            <strong id="gallerySelectedCount">Выбрано: 0</strong>
+            <span class="bulkbar-spacer"></span>
+            <label><span>Переместить в</span><select class="form-select" name="target" required>{% for option in folder_options %}<option value="{{ option.path }}">{{ option.label }}</option>{% endfor %}</select></label>
+            <button class="btn btn-success" id="galleryBulkMoveButton" type="submit" disabled>Переместить</button>
+          </form>
+        {% endif %}
         <section class="character-masonry" id="characterMasonry">
           {% for file in files %}
             <article class="character-masonry-item">
+              {% if can_manage %}<label class="character-gallery-selector" title="Выбрать {{ file.name }}"><input form="bulkMoveForm" type="checkbox" name="sources" value="{{ file.relative }}"><span>✓</span></label>{% endif %}
               <button class="character-masonry-card" type="button"
                     data-kind="{{ file.type }}"
                     data-name="{{ file.name }}"
@@ -210,6 +220,39 @@
         document.querySelector("#manageEntryKind").textContent = button.dataset.entryType === "folder" ? "Папка галереи" : "Файл галереи";
         manageDialog.showModal();
       }));
+
+      const selectors = [...document.querySelectorAll(".character-gallery-selector input")];
+      const selectAll = document.querySelector("#gallerySelectAll");
+      const selectedCount = document.querySelector("#gallerySelectedCount");
+      const bulkMoveButton = document.querySelector("#galleryBulkMoveButton");
+      let lastSelectedIndex = null;
+      const updateBulkSelection = () => {
+        const count = selectors.filter((input) => input.checked).length;
+        if (selectedCount) selectedCount.textContent = `Выбрано: ${count}`;
+        if (bulkMoveButton) bulkMoveButton.disabled = count === 0;
+        if (selectAll) {
+          selectAll.checked = count === selectors.length && count > 0;
+          selectAll.indeterminate = count > 0 && count < selectors.length;
+        }
+        selectors.forEach((input) => input.closest(".character-masonry-item").classList.toggle("is-selected", input.checked));
+      };
+      selectors.forEach((input, index) => input.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (event.shiftKey && lastSelectedIndex !== null) {
+          const [start, end] = [lastSelectedIndex, index].sort((a, b) => a - b);
+          selectors.slice(start, end + 1).forEach((item) => item.checked = input.checked);
+        }
+        lastSelectedIndex = index;
+        updateBulkSelection();
+      }));
+      selectAll?.addEventListener("change", () => {
+        selectors.forEach((input) => input.checked = selectAll.checked);
+        updateBulkSelection();
+      });
+      document.querySelector("#bulkMoveForm")?.addEventListener("submit", (event) => {
+        const count = selectors.filter((input) => input.checked).length;
+        if (!count || !confirm(`Переместить выбранные файлы (${count})?`)) event.preventDefault();
+      });
     </script>
     <script src="{% static 'photos/modals.js' %}"></script>
   </body>

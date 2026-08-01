@@ -10,6 +10,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
+from .note_crypto import NoteDecryptionError, decrypt_note, encrypt_note
 
 
 class OptionalUserProfileTests(TestCase):
@@ -234,6 +235,54 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertContains(response, 'folderImportForm.getAttribute("action")')
         self.assertNotContains(response, "fetch(folderImportForm.action")
 
+    def test_characters_can_be_selected_and_bulk_edited(self):
+        first = Character.objects.create(title=self.title, name="First", gender=Character.Gender.MALE)
+        second = Character.objects.create(title=self.title, name="Second", gender=Character.Gender.MALE)
+        untouched = Character.objects.create(title=self.title, name="Untouched", gender=Character.Gender.MALE)
+
+        response = self.client.post(f"{self.title.get_absolute_url()}characters/", {
+            "action": "bulk_update_characters",
+            "characters": [str(first.pk), str(second.pk)],
+            "bulk_gender": Character.Gender.FEMALE,
+            "bulk_importance": Character.Importance.MAIN,
+            "apply_role": "on",
+            "bulk_role": "Героиня",
+            "apply_race": "on",
+            "bulk_race": "Человек",
+        })
+
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        untouched.refresh_from_db()
+        self.assertEqual(first.gender, Character.Gender.FEMALE)
+        self.assertEqual(second.importance, Character.Importance.MAIN)
+        self.assertEqual(first.role, "Героиня")
+        self.assertEqual(second.race, "Человек")
+        self.assertEqual(untouched.gender, Character.Gender.MALE)
+        self.assertIn("bulk_updated=2", response.url)
+
+    def test_bulk_edit_is_scoped_to_current_title_and_gender_tabs_render(self):
+        female = Character.objects.create(title=self.title, name="Female", gender=Character.Gender.FEMALE)
+        male = Character.objects.create(title=self.title, name="Male", gender=Character.Gender.MALE)
+        another_title = Title.objects.create(name="Another title")
+        foreign = Character.objects.create(title=another_title, name="Foreign", gender=Character.Gender.MALE)
+
+        response = self.client.post(f"{self.title.get_absolute_url()}characters/", {
+            "action": "bulk_update_characters",
+            "characters": [str(female.pk), str(foreign.pk)],
+            "bulk_gender": Character.Gender.OTHER,
+        })
+        page = self.client.get(f"{self.title.get_absolute_url()}characters/")
+
+        female.refresh_from_db()
+        foreign.refresh_from_db()
+        self.assertEqual(female.gender, Character.Gender.OTHER)
+        self.assertEqual(foreign.gender, Character.Gender.MALE)
+        self.assertContains(page, 'data-gender-filter="female"')
+        self.assertContains(page, 'data-gender-filter="male"')
+        self.assertContains(page, 'data-gender="male"')
+
     def test_folder_import_rejects_paths_outside_media_library(self):
         response = self.client.post(
             f"{self.title.get_absolute_url()}characters/",
@@ -329,6 +378,49 @@ class CharacterCreateExperienceTests(TestCase):
         })
         self.assertEqual(moved.status_code, 302)
         self.assertTrue((gallery / "Официальные арты" / "photo.jpg").is_file())
+
+    def test_character_gallery_can_bulk_move_selected_photos(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Bulk Gallery",
+            gallery_folder="Catalog/character-studio/female/bulk-gallery",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        (gallery / "Избранное").mkdir(parents=True)
+        for filename in ("one.jpg", "two.png", "leave.webp"):
+            (gallery / filename).write_bytes(b"image")
+
+        response = self.client.post(f"{character.get_absolute_url()}gallery/", {
+            "action": "gallery_bulk_move",
+            "sources": ["one.jpg", "two.png"],
+            "target": "Избранное",
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue((gallery / "Избранное" / "one.jpg").is_file())
+        self.assertTrue((gallery / "Избранное" / "two.png").is_file())
+        self.assertTrue((gallery / "leave.webp").is_file())
+        self.assertIn("changed=2", response.url)
+
+    def test_bulk_move_validates_every_source_before_moving_any_file(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Safe Bulk Gallery",
+            gallery_folder="Catalog/character-studio/female/safe-bulk-gallery",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        (gallery / "Target").mkdir(parents=True)
+        (gallery / "safe.jpg").write_bytes(b"image")
+
+        response = self.client.post(f"{character.get_absolute_url()}gallery/", {
+            "action": "gallery_bulk_move",
+            "sources": ["safe.jpg", "../../outside.jpg"],
+            "target": "Target",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue((gallery / "safe.jpg").is_file())
+        self.assertFalse((gallery / "Target" / "safe.jpg").exists())
 
     def test_character_gallery_cannot_manage_another_gallery(self):
         character = Character.objects.create(
@@ -605,6 +697,53 @@ class TodoListTests(TestCase):
         self.assertNotContains(category, "Личная заметка")
         self.assertContains(detail, note.body)
         self.assertNotContains(inbox, note.title)
+
+    def test_new_notes_page_creates_plain_title_and_text_note(self):
+        response = self.client.post("/", {
+            "action": "create_note",
+            "title": "Название",
+            "body": "Текст заметки",
+            "project": self.project.pk,
+        })
+
+        note = TodoItem.objects.get(owner=self.user, title="Название")
+        self.assertEqual(note.body, "Текст заметки")
+        self.assertFalse(note.is_encrypted)
+        self.assertEqual(response.status_code, 302)
+
+    def test_encrypted_note_never_stores_plaintext_and_requires_password(self):
+        response = self.client.post("/", {
+            "action": "create_note",
+            "title": "Секрет",
+            "body": "Очень секретный текст",
+            "password": "strong-password",
+            "password_confirm": "strong-password",
+        })
+
+        note = TodoItem.objects.get(owner=self.user, title="Секрет")
+        self.assertTrue(note.is_encrypted)
+        self.assertEqual(note.body, "")
+        self.assertNotIn("Очень секретный текст", note.encrypted_body)
+        locked = self.client.get(f"/?note={note.pk}")
+        self.assertNotContains(locked, "Очень секретный текст")
+        wrong = self.client.post("/", {"action": "unlock_note", "item": note.pk, "password": "wrong"})
+        self.assertContains(wrong, "Неверный пароль")
+        unlocked = self.client.post("/", {
+            "action": "unlock_note",
+            "item": note.pk,
+            "password": "strong-password",
+        })
+        self.assertContains(unlocked, "Очень секретный текст")
+
+    def test_note_encryption_detects_wrong_password_and_tampering(self):
+        payload = encrypt_note("Защищённый текст", "password")
+
+        self.assertEqual(decrypt_note(payload, "password"), "Защищённый текст")
+        with self.assertRaises(NoteDecryptionError):
+            decrypt_note(payload, "wrong")
+        replacement = "A" if payload[-2] != "A" else "B"
+        with self.assertRaises(NoteDecryptionError):
+            decrypt_note(payload[:-2] + replacement + payload[-1], "password")
 
 
 class TextDocumentTests(TestCase):

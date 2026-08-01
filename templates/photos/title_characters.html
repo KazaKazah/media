@@ -6,14 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Персонажи — {{ title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
     <main class="catalog-shell">
       <nav class="detail-nav">
         <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
-        <a href="{% url 'photos:index' %}">Каталог</a>
         {% if can_manage %}
           <button class="detail-nav-button" type="button" data-modal-open="addCharacterModal">Добавить персонажа</button>
           <button class="detail-nav-button detail-nav-button-secondary" type="button" data-modal-open="importCharactersModal">Импорт из папок</button>
@@ -26,6 +25,8 @@
           Создано персонажей: {{ request.GET.imported }}{% if request.GET.skipped != "0" %}, пропущено: {{ request.GET.skipped }}{% endif %}.
         </div>
       {% endif %}
+      {% if request.GET.bulk_updated %}<div class="character-import-result"><strong>Персонажи обновлены.</strong> Изменено записей: {{ request.GET.bulk_updated }}.</div>{% endif %}
+      {% if bulk_error %}<div class="character-gallery-notice error"><strong>Массовое изменение не выполнено.</strong> {{ bulk_error }}</div>{% endif %}
 
       <header class="characters-directory-hero">
         <div class="characters-directory-poster">
@@ -56,11 +57,33 @@
         </div>
       </section>
 
+      <nav class="character-gender-tabs" id="characterGenderTabs" aria-label="Фильтр персонажей по полу">
+        <button class="active" type="button" data-gender-filter="all">Все <span>{{ characters|length }}</span></button>
+        <button type="button" data-gender-filter="female"><i>♀</i> Женские <span>{{ female_characters|length }}</span></button>
+        <button type="button" data-gender-filter="male"><i>♂</i> Мужские <span>{{ male_characters|length }}</span></button>
+        {% if other_gender_characters %}<button type="button" data-gender-filter="other">Другие <span>{{ other_gender_characters|length }}</span></button>{% endif %}
+      </nav>
+
+      {% if can_manage %}
+        <form class="character-bulk-editor" id="characterBulkEditor" method="post">
+          {% csrf_token %}<input type="hidden" name="action" value="bulk_update_characters">
+          <label class="bulk-select-all"><input type="checkbox" id="characterSelectAll"><span>Выбрать видимых</span></label>
+          <strong id="characterSelectedCount">Выбрано: 0</strong>
+          <select class="form-select" name="bulk_gender"><option value="">Пол: не изменять</option>{% for value, label in gender_choices %}<option value="{{ value }}">Пол: {{ label }}</option>{% endfor %}</select>
+          <select class="form-select" name="bulk_importance"><option value="">Роль в сюжете: не изменять</option>{% for value, label in importance_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
+          <label class="character-bulk-text"><input type="checkbox" name="apply_role"><input name="bulk_role" maxlength="120" placeholder="Изменить текстовую роль"></label>
+          <label class="character-bulk-text"><input type="checkbox" name="apply_race"><input name="bulk_race" maxlength="160" placeholder="Изменить расу"></label>
+          <button class="btn btn-success" id="characterBulkSubmit" type="submit" disabled>Применить</button>
+        </form>
+      {% endif %}
+
       <section class="characters-directory" id="charactersDirectory">
         {% for character in characters %}
           <article class="directory-character-card"
                    data-importance="{{ character.importance }}"
+                   data-gender="{{ character.gender }}"
                    data-search="{{ character.name }} {{ character.original_name }} {{ character.role }} {{ character.race }}">
+            {% if can_manage %}<label class="directory-character-selector" title="Выбрать {{ character.name }}"><input form="characterBulkEditor" type="checkbox" name="characters" value="{{ character.id }}"><span>✓</span></label>{% endif %}
             <a class="directory-character-image" href="{{ character.get_absolute_url }}">
               {% if character.portrait_path %}
                 <img src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
@@ -228,16 +251,19 @@
       const directoryCards = [...document.querySelectorAll(".directory-character-card")];
       const search = document.querySelector("#directorySearch");
       const filters = [...document.querySelectorAll("[data-filter]")];
+      const genderFilters = [...document.querySelectorAll("[data-gender-filter]")];
       const empty = document.querySelector("#charactersFilterEmpty");
       let activeFilter = "all";
+      let activeGender = "all";
 
       const filterCharacters = () => {
         const query = search.value.trim().toLocaleLowerCase("ru");
         let visible = 0;
         directoryCards.forEach((card) => {
           const matchesFilter = activeFilter === "all" || card.dataset.importance === activeFilter;
+          const matchesGender = activeGender === "all" || card.dataset.gender === activeGender;
           const matchesSearch = !query || card.dataset.search.toLocaleLowerCase("ru").includes(query);
-          card.hidden = !(matchesFilter && matchesSearch);
+          card.hidden = !(matchesFilter && matchesGender && matchesSearch);
           if (!card.hidden) visible += 1;
         });
         empty.hidden = visible > 0;
@@ -250,6 +276,42 @@
         activeFilter = button.dataset.filter;
         filterCharacters();
       }));
+      genderFilters.forEach((button) => button.addEventListener("click", () => {
+        genderFilters.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        activeGender = button.dataset.genderFilter;
+        filterCharacters();
+        updateCharacterSelection?.();
+      }));
+
+      const characterSelectors = [...document.querySelectorAll(".directory-character-selector input")];
+      const characterSelectAll = document.querySelector("#characterSelectAll");
+      const characterSelectedCount = document.querySelector("#characterSelectedCount");
+      const characterBulkSubmit = document.querySelector("#characterBulkSubmit");
+      const updateCharacterSelection = () => {
+        const selected = characterSelectors.filter((input) => input.checked);
+        const visible = characterSelectors.filter((input) => !input.closest(".directory-character-card").hidden);
+        if (characterSelectedCount) characterSelectedCount.textContent = `Выбрано: ${selected.length}`;
+        if (characterBulkSubmit) characterBulkSubmit.disabled = selected.length === 0;
+        if (characterSelectAll) {
+          const visibleSelected = visible.filter((input) => input.checked).length;
+          characterSelectAll.checked = visible.length > 0 && visibleSelected === visible.length;
+          characterSelectAll.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
+        }
+        characterSelectors.forEach((input) => input.closest(".directory-character-card").classList.toggle("is-selected", input.checked));
+      };
+      characterSelectors.forEach((input) => input.addEventListener("change", updateCharacterSelection));
+      characterSelectAll?.addEventListener("change", () => {
+        characterSelectors.filter((input) => !input.closest(".directory-character-card").hidden).forEach((input) => input.checked = characterSelectAll.checked);
+        updateCharacterSelection();
+      });
+      document.querySelectorAll(".character-bulk-text > input[type='text'], .character-bulk-text > input:not([type])").forEach((input) => input.addEventListener("input", () => {
+        input.parentElement.querySelector("input[type='checkbox']").checked = true;
+      }));
+      document.querySelector("#characterBulkEditor")?.addEventListener("submit", (event) => {
+        const count = characterSelectors.filter((input) => input.checked).length;
+        if (!count || !confirm(`Изменить выбранных персонажей (${count})?`)) event.preventDefault();
+      });
 
       const addForm = document.querySelector("#directoryCharacterForm");
 

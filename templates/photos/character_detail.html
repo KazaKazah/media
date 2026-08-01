@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ character.name }} — {{ character.title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -14,9 +14,7 @@
       <nav class="detail-nav">
         <a href="{{ character.title.get_absolute_url }}">← {{ character.title.name }}</a>
         <a href="{% url 'photos:title_characters' character.title.slug %}">Все персонажи</a>
-        {% if can_manage %}
-          <a href="{% url 'photos:media_library' %}">Медиатека</a>
-        {% elif not request.user.is_authenticated %}
+        {% if not request.user.is_authenticated %}
           <a href="{% url 'login' %}?next={{ request.path }}">Войти для полного доступа</a>
         {% endif %}
       </nav>

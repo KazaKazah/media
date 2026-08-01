@@ -1,0 +1,69 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Заметки — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-bulk-characters">
+  </head>
+  <body class="notes-page">
+    {% include 'photos/_app_navbar.html' %}
+    <main class="notes-shell">
+      <aside class="notes-topics">
+        <div class="notes-sidebar-head"><div><span>Личная библиотека</span><h1>Заметки</h1></div><button type="button" data-modal-open="newNoteModal" aria-label="Новая заметка">＋</button></div>
+        <a class="notes-topic {% if not selected_project %}active{% endif %}" href="{% url 'photos:todo' %}"><span>Все заметки</span><strong>{{ notes|length }}</strong></a>
+        <div class="notes-topic-label">Темы</div>
+        {% for project in projects %}<a class="notes-topic {% if selected_project.id == project.id %}active{% endif %}" href="{% url 'photos:todo' %}?project={{ project.id }}"><i style="--topic-color:{{ project.color }}"></i><span>{{ project.name }}</span><strong>{{ project.note_count }}</strong></a>{% endfor %}
+        <form class="notes-new-topic" method="post">{% csrf_token %}<input type="hidden" name="action" value="create_project"><input name="name" maxlength="120" placeholder="Новая тема"><button type="submit">＋</button></form>
+      </aside>
+
+      <section class="notes-list-panel">
+        <form class="notes-search" method="get">{% if selected_project %}<input type="hidden" name="project" value="{{ selected_project.id }}">{% endif %}<span>⌕</span><input name="q" value="{{ query }}" placeholder="Поиск заметок"></form>
+        <div class="notes-list-heading"><strong>{% if selected_project %}{{ selected_project.name }}{% else %}Все записи{% endif %}</strong><span>{{ notes|length }}</span></div>
+        <div class="notes-list">
+          {% for note in notes %}<a class="note-list-card {% if selected_note.id == note.id %}active{% endif %}" href="{% url 'photos:todo' %}?{% if selected_project %}project={{ selected_project.id }}&{% endif %}note={{ note.id }}{% if query %}&q={{ query|urlencode }}{% endif %}">
+            <span class="note-list-title">{% if note.is_pinned %}<i>★</i>{% endif %}{{ note.title }}{% if note.is_encrypted %}<em>🔒</em>{% endif %}</span>
+            <span class="note-list-preview">{% if note.is_encrypted %}Содержимое защищено паролем{% elif note.body %}{{ note.body|truncatechars:100 }}{% else %}Пустая заметка{% endif %}</span>
+            <small>{{ note.updated_at|date:"d.m.Y H:i" }}{% if note.project %} · {{ note.project.name }}{% endif %}</small>
+          </a>{% empty %}<div class="notes-list-empty"><strong>Заметок пока нет</strong><span>Создайте первую запись.</span></div>{% endfor %}
+        </div>
+        <button class="notes-create-button" type="button" data-modal-open="newNoteModal">＋ Новая заметка</button>
+      </section>
+
+      <section class="note-editor-panel">
+        {% if note_error %}<div class="character-gallery-notice error">{{ note_error }}</div>{% endif %}
+        {% if selected_note %}
+          <header class="note-editor-head"><div><span>{% if selected_note.project %}{{ selected_note.project.name }}{% else %}Без темы{% endif %}</span><h2>{{ selected_note.title }}</h2><small>Изменено {{ selected_note.updated_at|date:"d.m.Y H:i" }}</small></div><div class="note-head-actions"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="toggle_note_pin"><input type="hidden" name="item" value="{{ selected_note.id }}"><button type="submit" title="Закрепить">{% if selected_note.is_pinned %}★{% else %}☆{% endif %}</button></form><form method="post" onsubmit="return confirm('Удалить заметку?');">{% csrf_token %}<input type="hidden" name="action" value="delete_note"><input type="hidden" name="item" value="{{ selected_note.id }}"><button class="danger" type="submit" title="Удалить">×</button></form></div></header>
+
+          {% if selected_note.is_encrypted and unlocked_body == None %}
+            <div class="note-lock-screen"><span>🔒</span><h3>Заметка зашифрована</h3><p>Введите пароль. Он используется только для расшифровки и нигде не сохраняется.</p><form method="post">{% csrf_token %}<input type="hidden" name="action" value="unlock_note"><input type="hidden" name="item" value="{{ selected_note.id }}"><input class="form-control" type="password" name="password" autocomplete="current-password" placeholder="Пароль" required><button class="btn btn-success" type="submit">Открыть заметку</button></form></div>
+          {% else %}
+            <form class="note-editor-form" method="post" id="noteEditorForm">
+              {% csrf_token %}<input type="hidden" name="action" value="update_note"><input type="hidden" name="item" value="{{ selected_note.id }}">
+              <div class="note-title-row"><input name="title" value="{{ selected_note.title }}" maxlength="220" required><select name="project"><option value="">Без темы</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_note.project_id == project.id %}selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></div>
+              <div class="note-format-toolbar" aria-label="Форматирование"><button type="button" data-wrap="**" title="Жирный"><b>B</b></button><button type="button" data-wrap="_" title="Курсив"><i>I</i></button><button type="button" data-prefix="# " title="Заголовок">H</button><button type="button" data-prefix="• " title="Список">• Список</button><button type="button" data-prefix="☐ " title="Чек-лист">☐</button><button type="button" data-prefix="> " title="Цитата">❞</button></div>
+              <textarea class="note-main-text" id="noteMainText" name="body" spellcheck="true" placeholder="Начните писать…">{% if selected_note.is_encrypted %}{{ unlocked_body }}{% else %}{{ selected_note.body }}{% endif %}</textarea>
+              <footer class="note-editor-footer"><input name="tags" value="{{ selected_note.tags }}" placeholder="Метки через запятую"><label><input type="checkbox" name="is_pinned" {% if selected_note.is_pinned %}checked{% endif %}> Закрепить</label><label class="note-encryption-toggle"><input type="checkbox" name="is_encrypted" {% if selected_note.is_encrypted %}checked{% endif %}> 🔒 Шифровать</label>{% if selected_note.is_encrypted %}<input type="password" name="password" placeholder="Текущий пароль для сохранения" required>{% endif %}<input type="password" name="new_password" placeholder="Новый пароль (необязательно)"><input type="password" name="new_password_confirm" placeholder="Повтор нового пароля"><button class="btn btn-success" type="submit">Сохранить</button></footer>
+            </form>
+          {% endif %}
+        {% else %}<div class="note-editor-empty"><span>✎</span><h2>Выберите заметку</h2><p>Или создайте новую запись с названием и текстом.</p><button class="btn btn-success" type="button" data-modal-open="newNoteModal">Создать заметку</button></div>{% endif %}
+      </section>
+    </main>
+
+    <dialog class="app-modal" id="newNoteModal" {% if note_error and request.POST.action == 'create_note' %}data-auto-open="true"{% endif %}><div class="app-modal-card"><header class="app-modal-header"><div><span class="character-page-eyebrow">Новая запись</span><h2>Создать заметку</h2><p>Название и свободный текст. Пароль необязателен.</p></div><button class="app-modal-close" type="button" data-modal-close>×</button></header><form class="app-modal-body new-note-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="create_note"><label><span>Название</span><input class="form-control" name="title" maxlength="220" required placeholder="Название заметки"></label><label><span>Тема</span><select class="form-select" name="project"><option value="">Без темы</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_project.id == project.id %}selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label><label class="wide"><span>Текст</span><textarea class="form-control" name="body" rows="10" placeholder="Текст заметки"></textarea></label><div class="new-note-passwords"><label><span>Пароль для шифрования</span><input class="form-control" type="password" name="password" autocomplete="new-password"></label><label><span>Повторите пароль</span><input class="form-control" type="password" name="password_confirm" autocomplete="new-password"></label></div><div class="profile-form-actions"><button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button><button class="btn btn-success" type="submit">Создать</button></div></form></div></dialog>
+    <script src="{% static 'photos/modals.js' %}"></script>
+    <script>
+      const editor = document.querySelector("#noteMainText");
+      document.querySelectorAll(".note-format-toolbar button").forEach((button) => button.addEventListener("click", () => {
+        if (!editor) return;
+        const start = editor.selectionStart, end = editor.selectionEnd;
+        const selected = editor.value.slice(start, end);
+        const wrap = button.dataset.wrap || "", prefix = button.dataset.prefix || "";
+        const replacement = prefix ? prefix + selected : wrap + selected + wrap;
+        editor.setRangeText(replacement, start, end, "end"); editor.focus();
+      }));
+    </script>
+  </body>
+</html>
