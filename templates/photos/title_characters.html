@@ -13,8 +13,18 @@
       <nav class="detail-nav">
         <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
         <a href="{% url 'photos:index' %}">Каталог</a>
-        {% if can_manage %}<button class="detail-nav-button" type="button" data-modal-open="addCharacterModal">Добавить персонажа</button>{% endif %}
+        {% if can_manage %}
+          <button class="detail-nav-button" type="button" data-modal-open="addCharacterModal">Добавить персонажа</button>
+          <button class="detail-nav-button detail-nav-button-secondary" type="button" data-modal-open="importCharactersModal">Импорт из папок</button>
+        {% endif %}
       </nav>
+
+      {% if request.GET.imported != None %}
+        <div class="character-import-result">
+          <strong>Импорт завершён.</strong>
+          Создано персонажей: {{ request.GET.imported }}{% if request.GET.skipped != "0" %}, пропущено: {{ request.GET.skipped }}{% endif %}.
+        </div>
+      {% endif %}
 
       <header class="characters-directory-hero">
         <div class="characters-directory-poster">
@@ -152,6 +162,64 @@
           </form>
           </div>
         </dialog>
+
+        <dialog class="app-modal app-modal-wide" id="importCharactersModal" {% if import_form.is_bound %}data-auto-open="true"{% endif %}>
+          <div class="app-modal-card app-modal-card-wide">
+            <header class="app-modal-header">
+              <div>
+                <span class="character-page-eyebrow">Пакетное создание</span>
+                <h2>Импорт персонажей из папок</h2>
+                <p>Названия подпапок станут именами персонажей, а фотографии — их галереями.</p>
+              </div>
+              <div class="app-modal-top-actions">
+                <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+                <button class="btn btn-success" type="submit" form="characterFolderImportForm">Создать персонажей</button>
+                <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+              </div>
+            </header>
+            <form method="post" enctype="multipart/form-data" class="app-modal-body character-folder-import-form" id="characterFolderImportForm" novalidate>
+              {% csrf_token %}
+              <input type="hidden" name="action" value="import_character_folders">
+              {% if import_form.non_field_errors %}<div class="character-form-alert">{{ import_form.non_field_errors }}</div>{% endif %}
+
+              <div class="character-folder-example" aria-label="Пример структуры папок">
+                <strong>Как должна выглядеть папка</strong>
+                <code>Персонажи/<br>├── Эрис Борей Грейрат/ <span>photo-1.jpg, photo-2.jpg</span><br>├── Рокси Мигурдия/ <span>portrait.png, arts/…</span><br>└── Сильфиетта/ <span>image.webp</span></code>
+              </div>
+
+              <label class="character-folder-dropzone" id="characterFolderDropzone">
+                <input id="characterFolderPicker" type="file" name="folder_files" webkitdirectory directory multiple hidden>
+                <span class="character-folder-dropzone-icon">⇧</span>
+                <strong>Перетащите сюда общую папку</strong>
+                <small>или нажмите, чтобы выбрать папку на устройстве</small>
+                <em id="characterFolderSelection">Папка ещё не выбрана</em>
+              </label>
+
+              <div class="character-field character-field-wide{% if import_form.source_folder.errors %} has-error{% endif %}">
+                <label for="{{ import_form.source_folder.id_for_label }}">{{ import_form.source_folder.label }}</label>
+                {{ import_form.source_folder }}
+                <small>{{ import_form.source_folder.help_text }}</small>
+                {{ import_form.source_folder.errors }}
+              </div>
+
+              <div class="character-folder-import-options">
+                <div class="character-field">
+                  <label for="{{ import_form.gender.id_for_label }}">{{ import_form.gender.label }}</label>
+                  {{ import_form.gender }}{{ import_form.gender.errors }}
+                </div>
+                <div class="character-field">
+                  <label for="{{ import_form.importance.id_for_label }}">{{ import_form.importance.label }}</label>
+                  {{ import_form.importance }}{{ import_form.importance.errors }}
+                </div>
+              </div>
+              <label class="character-gallery-toggle">
+                {{ import_form.use_first_photo }}
+                <span><strong>{{ import_form.use_first_photo.label }}</strong><small>Поиск выполняется и во вложенных папках персонажа</small></span>
+              </label>
+              <p class="character-folder-import-note">При перетаскивании фотографии загружаются в медиатеку с сохранением подпапок. Повторный импорт безопасен: персонажи с таким же именем будут пропущены.</p>
+            </form>
+          </div>
+        </dialog>
       {% endif %}
     </main>
 
@@ -207,6 +275,104 @@
           preview.querySelector("span").hidden = Boolean(previewUrl);
         });
         updatePreview();
+      }
+
+      const folderImportForm = document.querySelector("#characterFolderImportForm");
+      if (folderImportForm) {
+        const dropzone = document.querySelector("#characterFolderDropzone");
+        const picker = document.querySelector("#characterFolderPicker");
+        const selection = document.querySelector("#characterFolderSelection");
+        let selectedFolderFiles = [];
+
+        const showSelection = () => {
+          if (!selectedFolderFiles.length) {
+            selection.textContent = "Папка ещё не выбрана";
+            return;
+          }
+          const roots = new Set(selectedFolderFiles.map((item) => item.path.split("/")[0]));
+          selection.textContent = `${[...roots].join(", ")} · файлов: ${selectedFolderFiles.length}`;
+        };
+
+        picker.addEventListener("change", () => {
+          selectedFolderFiles = [...picker.files].map((file) => ({
+            file,
+            path: file.webkitRelativePath || file.name,
+          }));
+          showSelection();
+        });
+
+        const readDirectory = async (entry) => {
+          const reader = entry.createReader();
+          const children = [];
+          while (true) {
+            const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+            if (!batch.length) break;
+            children.push(...batch);
+          }
+          const files = [];
+          for (const child of children) {
+            if (child.isDirectory) files.push(...await readDirectory(child));
+            if (child.isFile) {
+              const file = await new Promise((resolve, reject) => child.file(resolve, reject));
+              files.push({file, path: child.fullPath.replace(/^\//, "")});
+            }
+          }
+          return files;
+        };
+
+        ["dragenter", "dragover"].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.add("is-dragging");
+        }));
+        ["dragleave", "drop"].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.remove("is-dragging");
+        }));
+        dropzone.addEventListener("drop", async (event) => {
+          const entries = [...event.dataTransfer.items]
+            .map((item) => item.webkitGetAsEntry?.())
+            .filter(Boolean);
+          selection.textContent = "Читаю структуру папки…";
+          try {
+            selectedFolderFiles = [];
+            for (const entry of entries) {
+              if (entry.isDirectory) selectedFolderFiles.push(...await readDirectory(entry));
+              if (entry.isFile) {
+                const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+                selectedFolderFiles.push({file, path: entry.name});
+              }
+            }
+            showSelection();
+          } catch (error) {
+            selection.textContent = "Не удалось прочитать папку. Выберите её кнопкой.";
+          }
+        });
+
+        folderImportForm.addEventListener("submit", (event) => {
+          if (!selectedFolderFiles.length) return;
+          event.preventDefault();
+          const payload = new FormData(folderImportForm);
+          payload.delete("folder_files");
+          selectedFolderFiles.forEach(({file, path}) => {
+            payload.append("folder_files", file, file.name);
+            payload.append("relative_paths", path);
+          });
+          selection.textContent = `Загрузка ${selectedFolderFiles.length} файлов…`;
+          folderImportForm.querySelectorAll("button").forEach((button) => button.disabled = true);
+          fetch(folderImportForm.action || window.location.href, {
+            method: "POST",
+            body: payload,
+            credentials: "same-origin",
+          }).then((response) => {
+            if (response.redirected) window.location.assign(response.url);
+            else return response.text().then((html) => {
+              document.open(); document.write(html); document.close();
+            });
+          }).catch(() => {
+            selection.textContent = "Ошибка загрузки. Проверьте соединение и повторите.";
+            folderImportForm.querySelectorAll("button").forEach((button) => button.disabled = false);
+          });
+        });
       }
     </script>
     <script src="{% static 'photos/modals.js' %}"></script>

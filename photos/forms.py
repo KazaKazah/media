@@ -6,12 +6,65 @@ from .document_readers import DocumentReadError, SUPPORTED_EXTENSIONS, extract_d
 from .models import Character, TextDocument, Title
 
 
+class CommaSeparatedMultipleChoiceField(forms.MultipleChoiceField):
+    def prepare_value(self, value):
+        if isinstance(value, str):
+            return [item for item in value.split(",") if item]
+        return super().prepare_value(value)
+
+    def clean(self, value):
+        selected = super().clean(value)
+        return ",".join(selected)
+
+
 class TitleForm(forms.ModelForm):
+    genres = CommaSeparatedMultipleChoiceField(
+        label="Жанры",
+        choices=Title.GENRE_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    themes = CommaSeparatedMultipleChoiceField(
+        label="Темы",
+        choices=Title.THEME_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.CheckboxSelectMultiple):
+                field.widget.attrs.setdefault("class", "title-check-list")
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.setdefault("class", "form-select")
+            else:
+                field.widget.attrs.setdefault("class", "form-control")
+
+    def clean_score(self):
+        score = self.cleaned_data.get("score")
+        if score is not None and not 0 <= score <= 10:
+            raise forms.ValidationError("Оценка должна быть от 0 до 10.")
+        return score
+
+    def clean_year(self):
+        year = self.cleaned_data.get("year")
+        if year is not None and not 1900 <= year <= 2200:
+            raise forms.ValidationError("Укажите год от 1900 до 2200.")
+        return year
+
     class Meta:
         model = Title
-        fields = ["name", "kind", "is_adult", "original_name", "description", "poster_path", "gallery_folder"]
+        fields = [
+            "name", "original_name", "kind", "format", "release_status",
+            "year", "season", "episodes", "score", "age_rating", "audience",
+            "genres", "themes", "is_adult", "description", "poster_path", "gallery_folder",
+        ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
+            "year": forms.NumberInput(attrs={"min": 1900, "max": 2200}),
+            "score": forms.NumberInput(attrs={"min": 0, "max": 10, "step": .1}),
+            "episodes": forms.NumberInput(attrs={"min": 0}),
         }
 
 
@@ -95,6 +148,38 @@ class CharacterCreateForm(CharacterForm):
             "portrait_path": forms.TextInput(attrs={"placeholder": "Covers/Characters/…"}),
             "gallery_folder": forms.TextInput(attrs={"placeholder": "Оставьте пустым для автоматического пути"}),
         }
+
+
+class CharacterFolderImportForm(forms.Form):
+    source_folder = forms.CharField(
+        label="Или путь уже существующей папки в медиатеке",
+        max_length=1000,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Catalog/Название/Персонажи или ссылка из медиатеки",
+            "autocomplete": "off",
+        }),
+        help_text="Необязательно: используйте, если фотографии уже находятся на сервере.",
+    )
+    gender = forms.ChoiceField(
+        label="Пол для новых персонажей",
+        choices=Character.Gender.choices,
+        initial=Character.Gender.FEMALE,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    importance = forms.ChoiceField(
+        label="Роль для новых персонажей",
+        choices=Character.Importance.choices,
+        initial=Character.Importance.SUPPORTING,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    use_first_photo = forms.BooleanField(
+        label="Использовать первое фото как портрет",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
 
 
 class TextDocumentUploadForm(forms.Form):

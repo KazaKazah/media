@@ -109,6 +109,86 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertTrue((Path(self.temp_media.name) / character.portrait_path).exists())
         self.assertTrue((Path(self.temp_media.name) / character.gallery_folder).is_dir())
 
+    def test_characters_can_be_imported_from_named_folders(self):
+        source = Path(self.temp_media.name) / "Imports" / "Characters"
+        (source / "Эрис Борей Грейрат" / "Арты").mkdir(parents=True)
+        (source / "Рокси Мигурдия").mkdir()
+        (source / "Эрис Борей Грейрат" / "Арты" / "eris.webp").write_bytes(b"image")
+        (source / "Рокси Мигурдия" / "roxy.jpg").write_bytes(b"image")
+
+        url = f"{self.title.get_absolute_url()}characters/"
+        response = self.client.post(url, {
+            "action": "import_character_folders",
+            "source_folder": "/library/?path=Imports%2FCharacters",
+            "gender": Character.Gender.FEMALE,
+            "importance": Character.Importance.MAIN,
+            "use_first_photo": "on",
+        })
+
+        self.assertRedirects(
+            response,
+            f"{url}?imported=2&skipped=0",
+            fetch_redirect_response=False,
+        )
+        eris = Character.objects.get(title=self.title, name="Эрис Борей Грейрат")
+        self.assertEqual(eris.gallery_folder, "Imports/Characters/Эрис Борей Грейрат")
+        self.assertEqual(eris.portrait_path, "Imports/Characters/Эрис Борей Грейрат/Арты/eris.webp")
+        self.assertEqual(eris.importance, Character.Importance.MAIN)
+
+        second = self.client.post(url, {
+            "action": "import_character_folders",
+            "source_folder": "Imports/Characters",
+            "gender": Character.Gender.FEMALE,
+            "importance": Character.Importance.SUPPORTING,
+            "use_first_photo": "on",
+        })
+        self.assertEqual(Character.objects.filter(title=self.title).count(), 2)
+        self.assertEqual(second.url, f"{url}?imported=0&skipped=2")
+
+    def test_dragged_character_folders_are_uploaded_with_their_structure(self):
+        url = f"{self.title.get_absolute_url()}characters/"
+        response = self.client.post(url, {
+            "action": "import_character_folders",
+            "gender": Character.Gender.FEMALE,
+            "importance": Character.Importance.SUPPORTING,
+            "use_first_photo": "on",
+            "folder_files": [
+                SimpleUploadedFile("eris.jpg", b"eris", content_type="image/jpeg"),
+                SimpleUploadedFile("art.webp", b"art", content_type="image/webp"),
+                SimpleUploadedFile("roxy.png", b"roxy", content_type="image/png"),
+            ],
+            "relative_paths": [
+                "My Characters/Эрис/eris.jpg",
+                "My Characters/Эрис/Arts/art.webp",
+                "My Characters/Рокси/roxy.png",
+            ],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Character.objects.filter(title=self.title).count(), 2)
+        eris = Character.objects.get(title=self.title, name="Эрис")
+        self.assertTrue(eris.gallery_folder.endswith("/My Characters/Эрис"))
+        self.assertTrue(eris.portrait_path.endswith("/My Characters/Эрис/eris.jpg"))
+        self.assertTrue((Path(self.temp_media.name) / eris.portrait_path).is_file())
+        self.assertTrue(
+            (Path(self.temp_media.name) / eris.gallery_folder / "Arts" / "art.webp").is_file()
+        )
+
+    def test_folder_import_rejects_paths_outside_media_library(self):
+        response = self.client.post(
+            f"{self.title.get_absolute_url()}characters/",
+            {
+                "action": "import_character_folders",
+                "source_folder": "/tmp",
+                "gender": Character.Gender.FEMALE,
+                "importance": Character.Importance.SUPPORTING,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Можно выбирать папки только внутри медиатеки")
+        self.assertFalse(Character.objects.filter(title=self.title).exists())
+
     def test_title_links_to_directory_and_legacy_character_url_redirects(self):
         character = Character.objects.create(title=self.title, name="Эрис")
 
@@ -179,6 +259,87 @@ class CharacterCreateExperienceTests(TestCase):
         )
         self.assertTrue((gallery / "new-photo.jpg").exists())
         self.assertFalse((gallery / "album-notes.txt").exists())
+
+
+class TitleCatalogMetadataTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser("metadata-admin", password="test")
+        self.client.force_login(self.admin)
+        self.magic = Title.objects.create(
+            name="Magic Academy",
+            format=Title.Format.TV,
+            release_status=Title.ReleaseStatus.ONGOING,
+            year=2026,
+            season=Title.Season.SUMMER,
+            age_rating=Title.AgeRating.PG13,
+            audience=Title.Audience.SHOUNEN,
+            genres="fantasy,action",
+            themes="school,magic",
+            score="8.7",
+        )
+        self.romance = Title.objects.create(
+            name="Quiet Romance",
+            format=Title.Format.MOVIE,
+            year=2024,
+            genres="romance,drama",
+        )
+
+    def test_catalog_filters_optional_metadata(self):
+        response = self.client.get("/titles/", {
+            "format": Title.Format.TV,
+            "year": "2026",
+            "genre": "fantasy",
+            "theme": "magic",
+        })
+
+        self.assertContains(response, self.magic.name)
+        self.assertNotContains(response, self.romance.name)
+        self.assertContains(response, "Сортировка")
+        self.assertContains(response, "Жанры")
+
+    def test_create_form_saves_optional_genres_and_themes(self):
+        response = self.client.post("/titles/", {
+            "name": "New Metadata Title",
+            "kind": Title.Kind.ANIME,
+            "format": Title.Format.OVA,
+            "year": "2025",
+            "score": "7.5",
+            "genres": ["action", "fantasy"],
+            "themes": ["magic", "school"],
+        })
+
+        created = Title.objects.get(name="New Metadata Title")
+        self.assertRedirects(response, created.get_absolute_url())
+        self.assertEqual(created.genres, "action,fantasy")
+        self.assertEqual(created.themes, "magic,school")
+
+    def test_title_page_immediately_lists_all_related_characters(self):
+        for index in range(10):
+            Character.objects.create(title=self.magic, name=f"Character {index}")
+
+        response = self.client.get(self.magic.get_absolute_url())
+
+        for index in range(10):
+            self.assertContains(response, f"Character {index}")
+
+    def test_downloader_package_requires_login_and_contains_gui(self):
+        anonymous = Client().get("/tools/hentaidad/download/")
+        self.assertEqual(anonymous.status_code, 302)
+
+        response = self.client.get("/tools/hentaidad/download/")
+        payload = b"".join(response.streaming_content)
+        with ZipFile(BytesIO(payload)) as archive:
+            names = set(archive.namelist())
+
+        self.assertIn("HentaidadDownloader/hentaidad_sync.py", names)
+        self.assertIn("HentaidadDownloader/hentaidad_downloader_gui.py", names)
+        self.assertIn("HentaidadDownloader/start-windows.bat", names)
+
+        single = self.client.get("/tools/hentaidad/download-single/")
+        single_payload = b"".join(single.streaming_content)
+        compile(single_payload, "HentaidadDownloader.pyw", "exec")
+        self.assertIn("HentaidadDownloader.pyw", single["Content-Disposition"])
+        self.assertIn(b"embedded_sync_path", single_payload)
 
 
 class TodoListTests(TestCase):

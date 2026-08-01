@@ -14,11 +14,75 @@ class Title(models.Model):
         BOOK = "book", "Книги"
         OTHER = "other", "Другое"
 
+    class Season(models.TextChoices):
+        WINTER = "winter", "Зима"
+        SPRING = "spring", "Весна"
+        SUMMER = "summer", "Лето"
+        AUTUMN = "autumn", "Осень"
+
+    class ReleaseStatus(models.TextChoices):
+        ANNOUNCED = "announced", "Анонсировано"
+        ONGOING = "ongoing", "Выходит"
+        COMPLETED = "completed", "Завершено"
+        PAUSED = "paused", "Приостановлено"
+
+    class Format(models.TextChoices):
+        TV = "tv", "TV-сериал"
+        MOVIE = "movie", "Фильм"
+        OVA = "ova", "OVA"
+        ONA = "ona", "ONA"
+        SPECIAL = "special", "Спецвыпуск"
+        SHORT = "short", "Короткометражное"
+        MUSIC = "music", "Клип"
+        OTHER = "other", "Другое"
+
+    class AgeRating(models.TextChoices):
+        G = "g", "G"
+        PG = "pg", "PG"
+        PG13 = "pg13", "PG-13"
+        R17 = "r17", "R-17"
+        RPLUS = "rplus", "R+"
+        RX = "rx", "Rx"
+
+    class Audience(models.TextChoices):
+        SHOUNEN = "shounen", "Сёнен"
+        SHOUJO = "shoujo", "Сёдзё"
+        SEINEN = "seinen", "Сэйнэн"
+        JOSEI = "josei", "Дзёсэй"
+        KIDS = "kids", "Детское"
+
+    GENRE_CHOICES = (
+        ("action", "Экшен"), ("adventure", "Приключения"), ("comedy", "Комедия"),
+        ("drama", "Драма"), ("fantasy", "Фэнтези"), ("romance", "Романтика"),
+        ("sci-fi", "Фантастика"), ("slice-of-life", "Повседневность"),
+        ("supernatural", "Сверхъестественное"), ("mystery", "Детектив"),
+        ("horror", "Ужасы"), ("thriller", "Триллер"), ("sports", "Спорт"),
+        ("ecchi", "Этти"), ("erotica", "Эротика"),
+    )
+    THEME_CHOICES = (
+        ("school", "Школа"), ("isekai", "Исекай"), ("magic", "Магия"),
+        ("vampires", "Вампиры"), ("demons", "Демоны"), ("military", "Военное"),
+        ("historical", "Историческое"), ("space", "Космос"), ("music", "Музыка"),
+        ("games", "Игры"), ("martial-arts", "Боевые искусства"),
+        ("psychological", "Психологическое"), ("workplace", "Работа"),
+        ("adult-cast", "Взрослые персонажи"),
+    )
+
     name = models.CharField("Название", max_length=220)
     slug = models.SlugField("URL", max_length=240, unique=True, blank=True)
     kind = models.CharField("Тип", max_length=20, choices=Kind.choices, default=Kind.ANIME)
     original_name = models.CharField("Оригинальное название", max_length=220, blank=True)
     description = models.TextField("Описание", blank=True)
+    year = models.PositiveSmallIntegerField("Год выхода", null=True, blank=True)
+    season = models.CharField("Сезон", max_length=12, choices=Season.choices, blank=True)
+    release_status = models.CharField("Статус выхода", max_length=16, choices=ReleaseStatus.choices, blank=True)
+    format = models.CharField("Формат", max_length=16, choices=Format.choices, blank=True)
+    age_rating = models.CharField("Возрастной рейтинг", max_length=12, choices=AgeRating.choices, blank=True)
+    audience = models.CharField("Аудитория", max_length=16, choices=Audience.choices, blank=True)
+    genres = models.CharField("Жанры", max_length=500, blank=True)
+    themes = models.CharField("Темы", max_length=500, blank=True)
+    score = models.DecimalField("Оценка", max_digits=3, decimal_places=1, null=True, blank=True)
+    episodes = models.PositiveSmallIntegerField("Количество эпизодов", null=True, blank=True)
     is_adult = models.BooleanField("18+", default=False)
     poster_path = models.CharField("Путь к постеру в медиатеке", max_length=500, blank=True)
     gallery_folder = models.CharField("Папка галереи тайтла", max_length=500, blank=True)
@@ -46,6 +110,16 @@ class Title(models.Model):
 
     def get_absolute_url(self):
         return reverse("photos:title_detail", kwargs={"slug": self.slug})
+
+    @property
+    def genre_list(self):
+        labels = dict(self.GENRE_CHOICES)
+        return [labels.get(value, value) for value in self.genres.split(",") if value]
+
+    @property
+    def theme_list(self):
+        labels = dict(self.THEME_CHOICES)
+        return [labels.get(value, value) for value in self.themes.split(",") if value]
 
 
 class Character(models.Model):

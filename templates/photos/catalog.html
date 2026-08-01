@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Каталог — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260731-catalog">
   </head>
   <body>
     <main class="catalog-shell">
@@ -26,6 +26,7 @@
           <a class="btn btn-outline-success" href="{% url 'photos:todo' %}">To-Do List</a>
           {% if request.user.is_authenticated %}
             <a class="btn btn-outline-success" href="{% url 'photos:documents' %}">Документы</a>
+            <a class="btn btn-outline-success" href="{% url 'photos:hentaidad_tool' %}">Загрузчик</a>
           {% endif %}
           {% if can_manage %}
             <button class="btn btn-success" type="button" data-modal-open="createTitleModal">Добавить</button>
@@ -68,20 +69,62 @@
         </dialog>
       {% endif %}
 
-      <section class="catalog-tools">
-        <form class="catalog-search" method="get">
-          <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Поиск тайтла">
-          <select class="form-select" name="kind">
-            <option value="">Все типы</option>
-            {% for value, label in title_kinds %}
-              <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <button class="btn btn-success" type="submit">Найти</button>
-        </form>
-      </section>
+      <form class="catalog-search catalog-search-top" method="get" id="catalogFilterForm">
+        <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Название, персонаж, жанр или тема">
+        <select class="form-select" name="kind">
+          <option value="">Все типы</option>
+          {% for value, label in title_kinds %}
+            <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-success" type="submit">Найти</button>
+      </form>
 
-      <section class="title-grid">
+      <div class="catalog-browser">
+        <aside class="catalog-filters" id="catalogFilters">
+          <div class="catalog-filter-heading">
+            <div><strong>Фильтры</strong><small>Найдено: {{ titles|length }}</small></div>
+            <a href="{% url 'photos:index' %}">Сбросить</a>
+          </div>
+          <label class="catalog-sort">
+            <span>Сортировка</span>
+            <select class="form-select" name="sort" form="catalogFilterForm">
+              <option value="updated" {% if sort == "updated" %}selected{% endif %}>Недавно обновлённые</option>
+              <option value="score" {% if sort == "score" %}selected{% endif %}>По оценке</option>
+              <option value="year" {% if sort == "year" %}selected{% endif %}>По году</option>
+              <option value="characters" {% if sort == "characters" %}selected{% endif %}>По персонажам</option>
+              <option value="name" {% if sort == "name" %}selected{% endif %}>По алфавиту</option>
+            </select>
+          </label>
+
+          <details open><summary>Формат</summary><div class="catalog-filter-list">
+            {% for value, label in format_choices %}<label><input form="catalogFilterForm" type="checkbox" name="format" value="{{ value }}" {% if value in selected_formats %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <details open><summary>Статус</summary><div class="catalog-filter-list">
+            {% for value, label in status_choices %}<label><input form="catalogFilterForm" type="checkbox" name="status" value="{{ value }}" {% if value in selected_statuses %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          {% if year_choices %}<details open><summary>Год</summary><div class="catalog-filter-list catalog-filter-scroll">
+            {% for value in year_choices %}<label><input form="catalogFilterForm" type="checkbox" name="year" value="{{ value }}" {% if value in selected_years %}checked{% endif %}>{{ value }}</label>{% endfor %}
+          </div></details>{% endif %}
+          <details><summary>Сезон</summary><div class="catalog-filter-list">
+            {% for value, label in season_choices %}<label><input form="catalogFilterForm" type="checkbox" name="season" value="{{ value }}" {% if value in selected_seasons %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <details><summary>Рейтинг</summary><div class="catalog-filter-list">
+            {% for value, label in rating_choices %}<label><input form="catalogFilterForm" type="checkbox" name="rating" value="{{ value }}" {% if value in selected_ratings %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <details><summary>Аудитория</summary><div class="catalog-filter-list">
+            {% for value, label in audience_choices %}<label><input form="catalogFilterForm" type="checkbox" name="audience" value="{{ value }}" {% if value in selected_audiences %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <details open><summary>Жанры</summary><div class="catalog-filter-list catalog-filter-scroll">
+            {% for value, label in genre_choices %}<label><input form="catalogFilterForm" type="checkbox" name="genre" value="{{ value }}" {% if value in selected_genres %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <details><summary>Темы</summary><div class="catalog-filter-list catalog-filter-scroll">
+            {% for value, label in theme_choices %}<label><input form="catalogFilterForm" type="checkbox" name="theme" value="{{ value }}" {% if value in selected_themes %}checked{% endif %}>{{ label }}</label>{% endfor %}
+          </div></details>
+          <button class="btn btn-success w-100" type="submit" form="catalogFilterForm">Применить</button>
+        </aside>
+
+      <section class="title-grid catalog-results">
         {% for title in titles %}
           <article class="title-card">
             <a class="title-card-link" href="{{ title.get_absolute_url }}">
@@ -102,11 +145,24 @@
                   <small>{{ title.original_name }}</small>
                 {% endif %}
                 <span class="title-meta">
-                  <span>{{ title.characters.count }} персонажей</span>
+                  <span>{{ title.character_count }} персонажей</span>
+                  {% if title.year %}<span>{{ title.year }}</span>{% endif %}
+                  {% if title.score %}<span>★ {{ title.score }}</span>{% endif %}
                   {% if title.gallery_folder %}<span>Галерея</span>{% endif %}
                 </span>
+                {% if title.genre_list %}<span class="title-card-tags">{% for genre in title.genre_list|slice:":3" %}<i>{{ genre }}</i>{% endfor %}</span>{% endif %}
               </span>
             </a>
+            {% if title.characters.all %}
+              <div class="title-card-characters">
+                {% for character in title.characters.all|slice:":4" %}
+                  <a href="{{ character.get_absolute_url }}" title="{{ character.name }}">
+                    {% if character.portrait_path %}<img src="/media/{{ character.portrait_path }}" alt="">{% else %}<span>{{ character.name|slice:":1" }}</span>{% endif %}
+                    <small>{{ character.name }}</small>
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
             <span class="title-card-actions">
               <a class="title-action title-action-open" href="{{ title.get_absolute_url }}">Открыть</a>
               {% if can_manage %}
@@ -122,7 +178,13 @@
           <div class="empty-panel">Пока нет тайтлов.</div>
         {% endfor %}
       </section>
+      </div>
     </main>
     <script src="{% static 'photos/modals.js' %}"></script>
+    <script>
+      document.querySelectorAll("#catalogFilters input, #catalogFilters select").forEach((field) => {
+        field.addEventListener("change", () => document.querySelector("#catalogFilterForm").requestSubmit());
+      });
+    </script>
   </body>
 </html>

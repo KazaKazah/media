@@ -1,0 +1,93 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hentaidad Downloader — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260731-tools">
+  </head>
+  <body class="tool-download-page">
+    <main class="tool-download-shell">
+      <nav class="detail-nav">
+        <a href="{% url 'photos:index' %}">← Каталог</a>
+        <a href="{% url 'photos:media_library' %}">Медиатека</a>
+      </nav>
+
+      <section class="tool-download-hero">
+        <div class="tool-download-icon">↓</div>
+        <div>
+          <span class="character-page-eyebrow">Отдельная программа</span>
+          <h1>Hentaidad Album Downloader</h1>
+          <p>Загрузите программу на компьютер, выберите локальную папку и синхронизируйте доступные вам альбомы. Сайт не скачивает изображения на сервер и не получает доступ к выбранной папке.</p>
+        </div>
+      </section>
+
+      <section class="tool-download-grid">
+        <article class="tool-download-card primary">
+          <span>01</span>
+          <h2>Скачать одним файлом</h2>
+          <p><strong>HentaidadDownloader.pyw</strong> уже содержит графическое окно и загрузчик. После скачивания достаточно открыть этот файл двойным нажатием.</p>
+          <div class="tool-download-actions">
+            <button class="btn btn-success" id="saveToolToFolder" type="button">Выбрать папку и сохранить файл</button>
+            <a class="btn btn-outline-success" id="normalToolDownload" href="{% url 'photos:hentaidad_tool_download_single' %}" download>Скачать одним файлом</a>
+          </div>
+          <a class="tool-advanced-download" href="{% url 'photos:hentaidad_tool_download' %}" download>Скачать ZIP для расширенного запуска</a>
+          <div class="tool-download-status" id="toolDownloadStatus"></div>
+        </article>
+
+        <article class="tool-download-card">
+          <span>02</span>
+          <h2>Запустить</h2>
+          <p>Откройте <strong>HentaidadDownloader.pyw</strong> двойным нажатием. Требуется Python 3 с компонентом Tkinter; дополнительных библиотек устанавливать не нужно.</p>
+        </article>
+
+        <article class="tool-download-card">
+          <span>03</span>
+          <h2>Выбрать папку альбомов</h2>
+          <p>В открывшемся графическом окне нажмите «Выбрать папку», укажите каталог назначения и запустите синхронизацию.</p>
+        </article>
+
+        <article class="tool-download-card">
+          <span>04</span>
+          <h2>Повторять безопасно</h2>
+          <p>SQLite-реестр запоминает скачанные URL. Следующий запуск проверит старые альбомы, добавит новые фотографии и не перекачает существующие.</p>
+        </article>
+      </section>
+
+      <section class="tool-download-note">
+        <strong>Важно</strong>
+        <p>Программа не обходит авторизацию или ограничения сайта. Используйте её только для доступных вам материалов и не удаляйте файл <code>.hentaidad-sync.sqlite3</code>.</p>
+      </section>
+    </main>
+
+    <script>
+      const saveButton = document.querySelector("#saveToolToFolder");
+      const normalDownload = document.querySelector("#normalToolDownload");
+      const status = document.querySelector("#toolDownloadStatus");
+      if (!("showDirectoryPicker" in window)) {
+        saveButton.hidden = true;
+        status.textContent = "Ваш браузер использует обычное окно скачивания.";
+      }
+      saveButton.addEventListener("click", async () => {
+        try {
+          saveButton.disabled = true;
+          status.textContent = "Получаю пакет…";
+          const directory = await window.showDirectoryPicker({ mode: "readwrite" });
+          const response = await fetch(normalDownload.href, { credentials: "same-origin" });
+          if (!response.ok) throw new Error("Не удалось получить пакет");
+          const file = await directory.getFileHandle("HentaidadDownloader.pyw", { create: true });
+          const writable = await file.createWritable();
+          await writable.write(await response.blob());
+          await writable.close();
+          status.textContent = "Готово: HentaidadDownloader.pyw сохранён. Теперь откройте его двойным нажатием.";
+        } catch (error) {
+          status.textContent = error.name === "AbortError" ? "Сохранение отменено." : error.message;
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

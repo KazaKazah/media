@@ -1,6 +1,11 @@
 import json
+import base64
+import gzip
+import os
+from io import BytesIO
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
@@ -15,7 +20,13 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from .forms import CharacterCreateForm, CharacterForm, TextDocumentUploadForm, TitleForm
+from .forms import (
+    CharacterCreateForm,
+    CharacterFolderImportForm,
+    CharacterForm,
+    TextDocumentUploadForm,
+    TitleForm,
+)
 from . import library
 from .models import Character, TextDocument, Title, TodoItem, TodoProject
 
@@ -290,6 +301,27 @@ def index(request):
     titles = Title.objects.all()
     kind = request.GET.get("kind", "")
     query = request.GET.get("q", "").strip()
+    selected_formats = [value for value in request.GET.getlist("format") if value in Title.Format.values]
+    selected_statuses = [value for value in request.GET.getlist("status") if value in Title.ReleaseStatus.values]
+    selected_ratings = [value for value in request.GET.getlist("rating") if value in Title.AgeRating.values]
+    selected_audiences = [value for value in request.GET.getlist("audience") if value in Title.Audience.values]
+    selected_seasons = [value for value in request.GET.getlist("season") if value in Title.Season.values]
+    selected_genres = [value for value in request.GET.getlist("genre") if value in dict(Title.GENRE_CHOICES)]
+    selected_themes = [value for value in request.GET.getlist("theme") if value in dict(Title.THEME_CHOICES)]
+    selected_years = []
+    for value in request.GET.getlist("year"):
+        try:
+            selected_years.append(int(value))
+        except ValueError:
+            continue
+    sort = request.GET.get("sort", "updated")
+    sort_fields = {
+        "updated": "-updated_at",
+        "name": "name",
+        "year": "-year",
+        "score": "-score",
+        "characters": "-character_count",
+    }
     if kind in Title.Kind.values:
         titles = titles.filter(kind=kind)
     if query:
@@ -297,10 +329,32 @@ def index(request):
             Q(name__icontains=query)
             | Q(original_name__icontains=query)
             | Q(description__icontains=query)
+            | Q(genres__icontains=query)
+            | Q(themes__icontains=query)
             | Q(gallery_folder__icontains=query)
             | Q(characters__name__icontains=query)
             | Q(characters__role__icontains=query)
         ).distinct()
+    if selected_formats:
+        titles = titles.filter(format__in=selected_formats)
+    if selected_statuses:
+        titles = titles.filter(release_status__in=selected_statuses)
+    if selected_ratings:
+        titles = titles.filter(age_rating__in=selected_ratings)
+    if selected_audiences:
+        titles = titles.filter(audience__in=selected_audiences)
+    if selected_seasons:
+        titles = titles.filter(season__in=selected_seasons)
+    if selected_years:
+        titles = titles.filter(year__in=selected_years)
+    for genre in selected_genres:
+        titles = titles.filter(genres__icontains=genre)
+    for theme in selected_themes:
+        titles = titles.filter(themes__icontains=theme)
+    titles = titles.annotate(character_count=Count("characters", distinct=True)).order_by(
+        sort_fields.get(sort, "-updated_at"),
+        "name",
+    )
     form = TitleForm()
     if request.method == "POST":
         if not user_can_manage(request.user):
@@ -314,7 +368,24 @@ def index(request):
         "form": form,
         "kind": kind,
         "query": query,
+        "sort": sort if sort in sort_fields else "updated",
         "title_kinds": Title.Kind.choices,
+        "format_choices": Title.Format.choices,
+        "status_choices": Title.ReleaseStatus.choices,
+        "rating_choices": Title.AgeRating.choices,
+        "audience_choices": Title.Audience.choices,
+        "season_choices": Title.Season.choices,
+        "genre_choices": Title.GENRE_CHOICES,
+        "theme_choices": Title.THEME_CHOICES,
+        "year_choices": Title.objects.exclude(year=None).values_list("year", flat=True).distinct().order_by("-year"),
+        "selected_formats": selected_formats,
+        "selected_statuses": selected_statuses,
+        "selected_ratings": selected_ratings,
+        "selected_audiences": selected_audiences,
+        "selected_seasons": selected_seasons,
+        "selected_years": selected_years,
+        "selected_genres": selected_genres,
+        "selected_themes": selected_themes,
         "titles": titles.prefetch_related("characters"),
     })
 
@@ -349,18 +420,114 @@ def title_detail(request, slug):
     return render(request, "photos/title_detail.html", {
         "can_manage": user_can_manage(request.user),
         "title": title,
-        "character_preview": characters[:8],
+        "character_preview": characters,
     })
+
+
+@login_required
+def hentaidad_tool(request):
+    return render(request, "photos/hentaidad_tool.html")
+
+
+def build_single_file_downloader() -> bytes:
+    project_root = Path(__file__).resolve().parent.parent
+    script_dir = project_root / "scripts"
+    sync_payload = base64.b64encode(gzip.compress(
+        (script_dir / "hentaidad_sync.py").read_bytes(),
+        compresslevel=9,
+    )).decode("ascii")
+    gui_source = (script_dir / "hentaidad_downloader_gui.py").read_text(encoding="utf-8")
+    gui_source = gui_source.replace("#!/usr/bin/env python3\n", "", 1)
+    gui_source = gui_source.replace("from __future__ import annotations\n", "", 1)
+    gui_source = gui_source.replace(
+        'script = Path(__file__).with_name("hentaidad_sync.py")',
+        "script = embedded_sync_path()",
+        1,
+    )
+    preamble = f'''#!/usr/bin/env python3
+"""Hentaidad Downloader: single-file desktop application."""
+import base64 as _base64
+import gzip as _gzip
+import hashlib as _hashlib
+import tempfile as _tempfile
+from pathlib import Path as _EmbeddedPath
+
+_SYNC_PAYLOAD = "{sync_payload}"
+
+def embedded_sync_path():
+    payload = _gzip.decompress(_base64.b64decode(_SYNC_PAYLOAD))
+    folder = _EmbeddedPath(_tempfile.gettempdir()) / "DropAndTag-HentaidadDownloader"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / ("hentaidad_sync-" + _hashlib.sha256(payload).hexdigest()[:12] + ".py")
+    if not target.exists() or target.read_bytes() != payload:
+        target.write_bytes(payload)
+    return target
+
+'''
+    return (preamble + gui_source).encode("utf-8")
+
+
+@login_required
+def hentaidad_tool_download_single(request):
+    payload = BytesIO(build_single_file_downloader())
+    response = FileResponse(payload, content_type="text/x-python")
+    response["Content-Disposition"] = 'attachment; filename="HentaidadDownloader.pyw"'
+    return response
+
+
+@login_required
+def hentaidad_tool_download(request):
+    project_root = Path(__file__).resolve().parent.parent
+    script_dir = project_root / "scripts"
+    payload = BytesIO()
+    with ZipFile(payload, "w", ZIP_DEFLATED) as archive:
+        archive.write(script_dir / "hentaidad_sync.py", "HentaidadDownloader/hentaidad_sync.py")
+        archive.write(script_dir / "hentaidad_downloader_gui.py", "HentaidadDownloader/hentaidad_downloader_gui.py")
+        archive.write(script_dir / "README_HENTAIDAD_SYNC.md", "HentaidadDownloader/README.md")
+        archive.writestr(
+            "HentaidadDownloader/start-windows.bat",
+            "@echo off\r\ncd /d %~dp0\r\npython hentaidad_downloader_gui.py\r\npause\r\n",
+        )
+        archive.writestr(
+            "HentaidadDownloader/start-linux.sh",
+            "#!/usr/bin/env sh\ncd \"$(dirname \"$0\")\"\npython3 hentaidad_downloader_gui.py\n",
+        )
+    payload.seek(0)
+    response = FileResponse(payload, content_type="application/zip")
+    response["Content-Disposition"] = 'attachment; filename="HentaidadDownloader.zip"'
+    return response
 
 
 @ensure_csrf_cookie
 def title_characters(request, slug):
     title = get_object_or_404(Title, slug=slug)
     form = CharacterCreateForm()
+    import_form = CharacterFolderImportForm()
     if request.method == "POST":
         if not user_can_manage(request.user):
             raise PermissionDenied("Добавлять персонажей может только администратор")
-        form = CharacterCreateForm(request.POST, request.FILES)
+        if request.POST.get("action") == "import_character_folders":
+            import_form = CharacterFolderImportForm(request.POST)
+            if import_form.is_valid():
+                try:
+                    if request.FILES.getlist("folder_files"):
+                        imported, skipped = import_uploaded_character_folders(
+                            title,
+                            import_form.cleaned_data,
+                            request.FILES.getlist("folder_files"),
+                            request.POST.getlist("relative_paths"),
+                        )
+                    elif import_form.cleaned_data.get("source_folder"):
+                        imported, skipped = import_character_folders(title, import_form.cleaned_data)
+                    else:
+                        raise FileNotFoundError("Перетащите папку или выберите её кнопкой ниже.")
+                except (FileNotFoundError, NotADirectoryError, SuspiciousFileOperation, OSError) as error:
+                    import_form.add_error("source_folder", str(error))
+                else:
+                    target = reverse("photos:title_characters", kwargs={"slug": title.slug})
+                    return redirect(f"{target}?imported={imported}&skipped={skipped}")
+        else:
+            form = CharacterCreateForm(request.POST, request.FILES)
         if form.is_valid():
             character = form.save(commit=False)
             character.title = title
@@ -390,11 +557,150 @@ def title_characters(request, slug):
         "can_manage": user_can_manage(request.user),
         "title": title,
         "form": form,
+        "import_form": import_form,
         "characters": characters,
         "main_characters": characters.filter(importance=Character.Importance.MAIN),
         "supporting_characters": characters.filter(importance=Character.Importance.SUPPORTING),
         "episodic_characters": characters.filter(importance=Character.Importance.EPISODIC),
     })
+
+
+def normalize_media_folder_reference(value: str) -> str:
+    """Accept a library path, absolute path inside MEDIA_ROOT, or a library URL."""
+    value = value.strip()
+    parsed = urlparse(value)
+    if parsed.scheme or parsed.query:
+        query_path = parse_qs(parsed.query).get("path", [None])[0]
+        if query_path is None:
+            raise SuspiciousFileOperation("В ссылке медиатеки не найден параметр path.")
+        value = unquote(query_path)
+
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        try:
+            return candidate.resolve().relative_to(library.media_root().resolve()).as_posix()
+        except ValueError as error:
+            raise SuspiciousFileOperation("Можно выбирать папки только внутри медиатеки.") from error
+    return value
+
+
+def first_image_relative(folder: Path) -> str:
+    for root, directory_names, file_names in os.walk(folder):
+        directory_names[:] = sorted(
+            (name for name in directory_names if not name.startswith(".")),
+            key=str.casefold,
+        )
+        for filename in sorted(file_names, key=str.casefold):
+            candidate = Path(root) / filename
+            if not filename.startswith(".") and library.is_image_file(candidate):
+                return candidate.resolve().relative_to(library.media_root().resolve()).as_posix()
+    return ""
+
+
+def import_character_folders(title: Title, cleaned_data: dict) -> tuple[int, int]:
+    relative = normalize_media_folder_reference(cleaned_data["source_folder"])
+    _, parent = library.resolve_media_path(relative)
+    if not parent.exists():
+        raise FileNotFoundError("Папка не найдена в медиатеке.")
+    if not parent.is_dir():
+        raise NotADirectoryError("Указанный путь не является папкой.")
+
+    folders = sorted(
+        (
+            item for item in parent.iterdir()
+            if item.is_dir() and not item.is_symlink() and not item.name.startswith(".")
+        ),
+        key=lambda item: item.name.casefold(),
+    )
+    if not folders:
+        raise FileNotFoundError("В выбранной папке нет подпапок с персонажами.")
+
+    imported = skipped = 0
+    media_root = library.media_root().resolve()
+    for folder in folders:
+        name = folder.name.strip()
+        if not name or len(name) > Character._meta.get_field("name").max_length:
+            skipped += 1
+            continue
+        if title.characters.filter(name__iexact=name).exists():
+            skipped += 1
+            continue
+        Character.objects.create(
+            title=title,
+            name=name,
+            gender=cleaned_data["gender"],
+            importance=cleaned_data["importance"],
+            gallery_folder=folder.resolve().relative_to(media_root).as_posix(),
+            portrait_path=(first_image_relative(folder) if cleaned_data.get("use_first_photo") else ""),
+        )
+        imported += 1
+    return imported, skipped
+
+
+def import_uploaded_character_folders(
+    title: Title,
+    cleaned_data: dict,
+    uploaded_files: list,
+    relative_paths: list[str],
+) -> tuple[int, int]:
+    if len(uploaded_files) != len(relative_paths):
+        raise OSError("Браузер не передал структуру папок. Выберите общую папку ещё раз.")
+
+    entries = []
+    for uploaded, raw_path in zip(uploaded_files, relative_paths):
+        clean_path = library.normalize_relative(raw_path)
+        parts = Path(clean_path).parts
+        if len(parts) < 2 or not library.is_image_file(Path(uploaded.name)):
+            continue
+        entries.append((uploaded, parts))
+    if not entries:
+        raise FileNotFoundError("В выбранных подпапках не найдено поддерживаемых изображений.")
+
+    # Folder selection supplies Root/Character/photo.jpg. A drag assembled by the
+    # browser follows the same convention. Remove the shared Root component.
+    first_parts = {parts[0] for _, parts in entries}
+    has_shared_root = len(first_parts) == 1 and all(len(parts) >= 3 for _, parts in entries)
+    groups: dict[str, list[tuple]] = {}
+    for uploaded, parts in entries:
+        useful = parts[1:] if has_shared_root else parts
+        if len(useful) < 2:
+            continue
+        groups.setdefault(useful[0], []).append((uploaded, useful[1:]))
+    if not groups:
+        raise FileNotFoundError("В общей папке должны находиться подпапки с именами персонажей.")
+
+    imported = skipped = 0
+    batch_name = next(iter(first_parts)) if has_shared_root else "Загруженные персонажи"
+    base = f"Catalog/{title.slug}/Импорт/{batch_name}"
+    for name, files in sorted(groups.items(), key=lambda item: item[0].casefold()):
+        name = name.strip()
+        if not name or len(name) > Character._meta.get_field("name").max_length:
+            skipped += 1
+            continue
+        if title.characters.filter(name__iexact=name).exists():
+            skipped += 1
+            continue
+
+        gallery = ensure_media_folder(f"{base}/{name}")
+        portrait = ""
+        for uploaded, remainder in files:
+            target = gallery
+            if len(remainder) > 1:
+                nested = "/".join(remainder[:-1])
+                target = ensure_media_folder(f"{gallery}/{nested}")
+            result = library.save_uploaded_files(target, [uploaded])
+            if not portrait and result.get("saved"):
+                portrait = result["saved"][0]
+        Character.objects.create(
+            title=title,
+            name=name,
+            gender=cleaned_data["gender"],
+            importance=cleaned_data["importance"],
+            gallery_folder=gallery,
+            portrait_path=portrait if cleaned_data.get("use_first_photo") else "",
+        )
+        imported += 1
+    return imported, skipped
 
 
 @admin_required

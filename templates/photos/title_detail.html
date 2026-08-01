@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title.name }} — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-characters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260731-catalog">
   </head>
   <body>
     <main class="catalog-shell">
@@ -35,13 +35,7 @@
             <span>{{ title.get_kind_display }}</span>
           {% endif %}
           {% if can_manage %}
-            <form class="cover-upload-panel" method="post" enctype="multipart/form-data">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="upload_title_cover">
-              <label for="titleCover">Обложка</label>
-              <input id="titleCover" name="cover" type="file" accept="image/*" required>
-              <button class="btn btn-sm btn-light" type="submit">Загрузить</button>
-            </form>
+            <button class="title-cover-change" type="button" data-modal-open="titleCoverModal">Сменить обложку</button>
           {% endif %}
         </div>
 
@@ -55,7 +49,24 @@
           <div class="title-stats">
             <span><strong>{{ title.characters.count }}</strong> персонажей</span>
             <span><strong>{% if title.gallery_folder %}Есть{% else %}Нет{% endif %}</strong> галерея</span>
+            {% if title.year %}<span><strong>{{ title.year }}</strong>{% if title.season %}{{ title.get_season_display }}{% else %}год{% endif %}</span>{% endif %}
+            {% if title.score %}<span><strong>★ {{ title.score }}</strong>оценка</span>{% endif %}
           </div>
+          {% if title.format or title.release_status or title.age_rating or title.audience or title.episodes %}
+            <dl class="title-catalog-facts">
+              {% if title.format %}<div><dt>Формат</dt><dd>{{ title.get_format_display }}</dd></div>{% endif %}
+              {% if title.release_status %}<div><dt>Статус</dt><dd>{{ title.get_release_status_display }}</dd></div>{% endif %}
+              {% if title.episodes %}<div><dt>Эпизоды</dt><dd>{{ title.episodes }}</dd></div>{% endif %}
+              {% if title.age_rating %}<div><dt>Рейтинг</dt><dd>{{ title.get_age_rating_display }}</dd></div>{% endif %}
+              {% if title.audience %}<div><dt>Аудитория</dt><dd>{{ title.get_audience_display }}</dd></div>{% endif %}
+            </dl>
+          {% endif %}
+          {% if title.genre_list or title.theme_list %}
+            <div class="title-detail-tags">
+              {% for genre in title.genre_list %}<span>{{ genre }}</span>{% endfor %}
+              {% for theme in title.theme_list %}<span class="theme">{{ theme }}</span>{% endfor %}
+            </div>
+          {% endif %}
           {% if title.description %}<p class="title-description">{{ title.description }}</p>{% endif %}
           <div class="title-hero-actions">
             <a class="title-action title-action-open" href="{% url 'photos:title_characters' title.slug %}">Все персонажи</a>
@@ -68,6 +79,27 @@
           </div>
         </div>
       </section>
+      {% if can_manage %}
+        <dialog class="app-modal title-cover-modal" id="titleCoverModal">
+          <div class="app-modal-card">
+            <header class="app-modal-header">
+              <div><small>{{ title.name }}</small><h2>Новая обложка</h2></div>
+              <div class="app-modal-top-actions">
+                <button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button>
+                <button class="btn btn-success" type="submit" form="titleCoverForm">Загрузить</button>
+                <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+              </div>
+            </header>
+            <form class="app-modal-body title-cover-form" id="titleCoverForm" method="post" enctype="multipart/form-data">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="upload_title_cover">
+              <label for="titleCover">Выберите JPG, PNG, WEBP или перетащите файл</label>
+              <input class="form-control" id="titleCover" name="cover" type="file" accept="image/*" required>
+              <div class="title-cover-preview" id="titleCoverPreview"><span>Предпросмотр обложки</span></div>
+            </form>
+          </div>
+        </dialog>
+      {% endif %}
 
       <section class="title-character-preview">
         <div class="title-character-preview-head">
@@ -109,5 +141,19 @@
         {% endif %}
       </section>
     </main>
+    <script src="{% static 'photos/modals.js' %}"></script>
+    {% if can_manage %}
+      <script>
+        const titleCover = document.querySelector("#titleCover");
+        const titleCoverPreview = document.querySelector("#titleCoverPreview");
+        let titleCoverUrl = "";
+        titleCover?.addEventListener("change", () => {
+          if (titleCoverUrl) URL.revokeObjectURL(titleCoverUrl);
+          const file = titleCover.files[0];
+          titleCoverUrl = file ? URL.createObjectURL(file) : "";
+          titleCoverPreview.innerHTML = titleCoverUrl ? `<img src="${titleCoverUrl}" alt="">` : "<span>Предпросмотр обложки</span>";
+        });
+      </script>
+    {% endif %}
   </body>
 </html>
