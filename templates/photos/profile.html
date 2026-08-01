@@ -1,0 +1,38 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Профиль — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
+  </head>
+  <body class="profile-page">
+    {% include 'photos/_app_navbar.html' %}
+    <main class="profile-shell">
+      {% if request.GET.saved %}<div class="character-gallery-notice success">Профиль сохранён.</div>{% endif %}
+      <header class="profile-hero">
+        <div class="profile-avatar-large">
+          {% if profile.avatar_path %}<img src="/media/{{ profile.avatar_path }}" alt="">{% else %}<span>{{ request.user.username|slice:':1'|upper }}</span>{% endif %}
+        </div>
+        <div><span class="character-page-eyebrow">Личный профиль</span><h1>{% if profile.display_name %}{{ profile.display_name }}{% else %}{{ request.user.username }}{% endif %}</h1><p>{{ request.user.email|default:"Добавьте информацию о себе — это необязательно." }}</p></div>
+        <span class="profile-access-badge">{% if request.user.is_superuser %}Суперадминистратор{% elif request.user.is_staff %}Администратор{% else %}Пользователь{% endif %}</span>
+      </header>
+      <div class="profile-layout">
+        <aside class="profile-summary-card">
+          <strong>Учётная запись</strong>
+          <dl><div><dt>Логин</dt><dd>{{ request.user.username }}</dd></div><div><dt>Регистрация</dt><dd>{{ request.user.date_joined|date:"d.m.Y" }}</dd></div><div><dt>Последний вход</dt><dd>{{ request.user.last_login|date:"d.m.Y H:i"|default:"—" }}</dd></div></dl>
+          <p>Профиль необязателен и не влияет на авторизацию, права доступа или работу каталога.</p>
+        </aside>
+        <form class="profile-form-card" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div><span class="character-page-eyebrow">Настройки</span><h2>Информация профиля</h2></div>
+          {% if form.non_field_errors %}<div class="character-form-alert">{{ form.non_field_errors }}</div>{% endif %}
+          {% for field in form %}<label class="{% if field.name == 'bio' %}wide{% endif %}"><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}
+          <div class="profile-form-actions"><a class="btn btn-outline-secondary" href="{% url 'photos:index' %}">Отмена</a><button class="btn btn-success" type="submit">Сохранить профиль</button></div>
+        </form>
+      </div>
+    </main>
+  </body>
+</html>

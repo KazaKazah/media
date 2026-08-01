@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Каталог — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-profile">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -24,22 +24,8 @@
           <span>в каталоге</span>
         </div>
         <nav class="catalog-nav">
-          <a class="btn btn-outline-success" href="{% url 'photos:todo' %}">To-Do List</a>
-          {% if request.user.is_authenticated %}
-            <a class="btn btn-outline-success" href="{% url 'photos:documents' %}">Документы</a>
-            <a class="btn btn-outline-success" href="{% url 'photos:hentaidad_tool' %}">Загрузчик</a>
-          {% endif %}
           {% if can_manage %}
-            <button class="btn btn-success" type="button" data-modal-open="createTitleModal">Добавить</button>
-            <a class="btn btn-outline-success" href="{% url 'photos:media_library' %}">Медиатека</a>
-          {% endif %}
-          {% if request.user.is_authenticated %}
-            <form method="post" action="{% url 'logout' %}">
-              {% csrf_token %}
-              <button class="btn btn-outline-secondary" type="submit">Выйти</button>
-            </form>
-          {% else %}
-            <a class="btn btn-outline-success" href="{% url 'login' %}">Войти</a>
+            <button class="btn btn-success" type="button" data-modal-open="createTitleModal">＋ Добавить тайтл</button>
           {% endif %}
         </nav>
       </header>

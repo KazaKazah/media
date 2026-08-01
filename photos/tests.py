@@ -9,7 +9,38 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from .models import Character, TextDocument, Title, TodoItem, TodoProject
+from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
+
+
+class OptionalUserProfileTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            "profile-user",
+            email="profile@example.com",
+            password="test",
+        )
+        self.client.force_login(self.user)
+
+    def test_missing_profile_does_not_break_catalog_or_create_a_record(self):
+        response = self.client.get("/titles/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "profile-user")
+        self.assertFalse(UserProfile.objects.filter(user=self.user).exists())
+
+    def test_user_can_create_optional_profile(self):
+        response = self.client.post("/profile/", {
+            "display_name": "Асанали",
+            "bio": "Владелец медиатеки",
+            "location": "Астана",
+            "website": "",
+            "birth_date": "",
+        })
+
+        self.assertRedirects(response, "/profile/?saved=1", fetch_redirect_response=False)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertEqual(profile.display_name, "Асанали")
+        self.assertEqual(profile.location, "Астана")
 
 
 class AdultTitleAccessTests(TestCase):

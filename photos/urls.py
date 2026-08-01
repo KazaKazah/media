@@ -8,6 +8,7 @@ app_name = "photos"
 urlpatterns = [
     path("", views.todo_home, name="todo"),
     path("documents/", views.document_library, name="documents"),
+    path("profile/", views.profile, name="profile"),
     path("documents/<int:pk>/", views.document_detail, name="document_detail"),
     path("documents/<int:pk>/delete/", views.document_delete, name="document_delete"),
     path("titles/", views.index, name="index"),

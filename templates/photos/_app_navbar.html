@@ -6,7 +6,24 @@
       <a class="{% if request.resolver_match.url_name == 'todo' %}active{% endif %}" href="{% url 'photos:todo' %}">Задачи</a>
       <a class="{% if request.resolver_match.url_name == 'documents' or request.resolver_match.url_name == 'document_detail' %}active{% endif %}" href="{% url 'photos:documents' %}">Документы</a>
       {% if request.user.is_staff or request.user.is_superuser %}<a class="{% if request.resolver_match.url_name == 'media_library' %}active{% endif %}" href="{% url 'photos:media_library' %}">Медиатека</a>{% endif %}
+      <a class="{% if request.resolver_match.url_name == 'hentaidad_tool' %}active{% endif %}" href="{% url 'photos:hentaidad_tool' %}">Инструменты</a>
     {% endif %}
   </nav>
-  <div class="global-app-account">{% if request.user.is_authenticated %}<span>{{ request.user.username }}</span>{% else %}<a href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>{% endif %}</div>
+  <div class="global-app-account">
+    {% if request.user.is_authenticated %}
+      <details class="profile-menu">
+        <summary>
+          <span class="profile-menu-avatar">{% if request.user.profile.avatar_path %}<img src="/media/{{ request.user.profile.avatar_path }}" alt="">{% else %}{{ request.user.username|slice:':1'|upper }}{% endif %}</span>
+          <span class="profile-menu-name">{% if request.user.profile.display_name %}{{ request.user.profile.display_name }}{% else %}{{ request.user.username }}{% endif %}</span>
+          <i>⌄</i>
+        </summary>
+        <div class="profile-menu-panel">
+          <div><strong>{% if request.user.profile.display_name %}{{ request.user.profile.display_name }}{% else %}{{ request.user.username }}{% endif %}</strong><small>{{ request.user.email|default:'Профиль пользователя' }}</small></div>
+          <a href="{% url 'photos:profile' %}">Мой профиль</a>
+          {% if request.user.is_staff %}<a href="/admin/">Администрирование</a>{% endif %}
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Выйти</button></form>
+        </div>
+      </details>
+    {% else %}<a href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>{% endif %}
+  </div>
 </header>

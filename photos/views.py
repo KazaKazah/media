@@ -27,9 +27,10 @@ from .forms import (
     CharacterForm,
     TextDocumentUploadForm,
     TitleForm,
+    UserProfileForm,
 )
 from . import library
-from .models import Character, TextDocument, Title, TodoItem, TodoProject
+from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
 
 
 def json_error(error: Exception, status: int = 400):
@@ -38,6 +39,34 @@ def json_error(error: Exception, status: int = 400):
 
 def user_can_manage(user) -> bool:
     return bool(user.is_authenticated and (user.is_staff or user.is_superuser))
+
+
+@login_required
+def profile(request):
+    try:
+        instance = request.user.profile
+    except UserProfile.DoesNotExist:
+        instance = None
+    form = UserProfileForm(request.POST or None, request.FILES or None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        user_profile = form.save(commit=False)
+        user_profile.user = request.user
+        avatar = form.cleaned_data.get("avatar_upload")
+        if avatar:
+            try:
+                user_profile.avatar_path = save_cover_upload(
+                    avatar,
+                    f"Profiles/{request.user.pk}",
+                )
+            except ValueError as error:
+                form.add_error("avatar_upload", str(error))
+        if not form.errors:
+            user_profile.save()
+            return redirect(f"{reverse('photos:profile')}?saved=1")
+    return render(request, "photos/profile.html", {
+        "form": form,
+        "profile": instance,
+    })
 
 
 def admin_required(view_func):

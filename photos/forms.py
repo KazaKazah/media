@@ -3,7 +3,7 @@ from pathlib import Path
 from django import forms
 
 from .document_readers import DocumentReadError, SUPPORTED_EXTENSIONS, extract_document_text
-from .models import Character, TextDocument, Title
+from .models import Character, TextDocument, Title, UserProfile
 
 
 class CommaSeparatedMultipleChoiceField(forms.MultipleChoiceField):
@@ -219,3 +219,22 @@ class TextDocumentUploadForm(forms.Form):
             original_filename=Path(document.name).name,
             content=self.text_content,
         )
+
+
+class UserProfileForm(forms.ModelForm):
+    avatar_upload = forms.ImageField(
+        label="Новый аватар",
+        required=False,
+        widget=forms.FileInput(attrs={"accept": "image/*", "class": "form-control"}),
+    )
+
+    class Meta:
+        model = UserProfile
+        fields = ["display_name", "bio", "location", "website", "birth_date"]
+        widgets = {
+            "display_name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Как к вам обращаться"}),
+            "bio": forms.Textarea(attrs={"class": "form-control", "rows": 5, "placeholder": "Несколько слов о себе"}),
+            "location": forms.TextInput(attrs={"class": "form-control", "placeholder": "Например, Астана"}),
+            "website": forms.URLInput(attrs={"class": "form-control", "placeholder": "https://…"}),
+            "birth_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        }

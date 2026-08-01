@@ -255,3 +255,26 @@ class TextDocument(models.Model):
 
     def get_absolute_url(self):
         return reverse("photos:document_detail", kwargs={"pk": self.pk})
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    display_name = models.CharField("Отображаемое имя", max_length=120, blank=True)
+    bio = models.TextField("О себе", blank=True)
+    location = models.CharField("Город или страна", max_length=160, blank=True)
+    website = models.URLField("Сайт", blank=True)
+    birth_date = models.DateField("Дата рождения", null=True, blank=True)
+    avatar_path = models.CharField("Аватар в медиатеке", max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.display_name or self.user.get_username()
+
+    @property
+    def public_name(self):
+        return self.display_name or self.user.get_full_name() or self.user.get_username()
