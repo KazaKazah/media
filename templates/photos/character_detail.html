@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ character.name }} — {{ character.title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-characters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body>
+    {% include 'photos/_app_navbar.html' %}
     <main class="catalog-shell">
       <nav class="detail-nav">
         <a href="{{ character.title.get_absolute_url }}">← {{ character.title.name }}</a>

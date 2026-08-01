@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Hentaidad Downloader — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260731-tools">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body class="tool-download-page">
+    {% include 'photos/_app_navbar.html' %}
     <main class="tool-download-shell">
       <nav class="detail-nav">
         <a href="{% url 'photos:index' %}">← Каталог</a>

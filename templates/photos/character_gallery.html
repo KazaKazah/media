@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Галерея {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery-albums1">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body class="character-gallery-page">
+    {% include 'photos/_app_navbar.html' %}
     <main class="character-gallery-shell">
       <nav class="detail-nav">
         <a href="{{ character.get_absolute_url }}">← {{ character.name }}</a>
@@ -27,10 +28,14 @@
           {% if video_count %}<span><strong>{{ video_count }}</strong> видео</span>{% endif %}
           <span><strong>{{ folders|length }}</strong> папок</span>
         </div>
-        <a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">
-          Добавить фото
-        </a>
+        {% if can_manage %}<div class="character-gallery-hero-actions">
+          <button class="btn btn-outline-success" type="button" data-modal-open="createGalleryFolderModal">Новая папка</button>
+          <a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Добавить фото</a>
+        </div>{% endif %}
       </header>
+
+      {% if request.GET.changed %}<div class="character-gallery-notice success">Изменения сохранены.</div>{% endif %}
+      {% if operation_error %}<div class="character-gallery-notice error"><strong>Не удалось выполнить действие.</strong> {{ operation_error }}</div>{% endif %}
 
       <nav class="character-gallery-breadcrumbs" aria-label="Путь галереи">
         <a href="{% url 'photos:character_gallery' character.pk character.slug %}">Все фото</a>
@@ -43,17 +48,20 @@
       {% if folders %}
         <section class="character-gallery-folders">
           {% for folder in folders %}
-            <a class="character-gallery-folder" data-gallery-folder href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ folder.relative|urlencode }}">
-              <span>
-                {% if folder.preview %}
-                  <img src="{% url 'photos:thumbnail' 'thumb' folder.preview %}" alt="">
-                {% else %}
-                  <i aria-hidden="true"></i>
-                {% endif %}
-              </span>
-              <strong>{{ folder.name }}</strong>
-              <small>Открыть папку →</small>
-            </a>
+            <article class="character-gallery-folder-card">
+              <a class="character-gallery-folder" data-gallery-folder href="{% url 'photos:character_gallery' character.pk character.slug %}?folder={{ folder.relative|urlencode }}">
+                <span>
+                  {% if folder.preview %}
+                    <img src="{% url 'photos:thumbnail' 'thumb' folder.preview %}" alt="">
+                  {% else %}
+                    <i aria-hidden="true"></i>
+                  {% endif %}
+                </span>
+                <strong>{{ folder.name }}</strong>
+                <small>Открыть папку →</small>
+              </a>
+              {% if can_manage %}<button class="character-gallery-manage" type="button" data-manage-entry data-entry-type="folder" data-entry-path="{{ folder.relative }}" data-entry-name="{{ folder.name }}" aria-label="Управление папкой {{ folder.name }}">•••</button>{% endif %}
+            </article>
           {% endfor %}
         </section>
       {% endif %}
@@ -61,7 +69,8 @@
       {% if files %}
         <section class="character-masonry" id="characterMasonry">
           {% for file in files %}
-            <button class="character-masonry-card" type="button"
+            <article class="character-masonry-item">
+              <button class="character-masonry-card" type="button"
                     data-kind="{{ file.type }}"
                     data-name="{{ file.name }}"
                     data-source="{% url 'photos:media' file.path %}">
@@ -72,7 +81,9 @@
                 <span class="character-video-badge">Видео</span>
               {% endif %}
               <span class="character-masonry-caption">{{ file.name }}</span>
-            </button>
+              </button>
+              {% if can_manage %}<button class="character-gallery-manage file-manage" type="button" data-manage-entry data-entry-type="file" data-entry-path="{{ file.relative }}" data-entry-name="{{ file.name }}" aria-label="Управление файлом {{ file.name }}">•••</button>{% endif %}
+            </article>
           {% endfor %}
         </section>
       {% elif not folders %}
@@ -80,10 +91,44 @@
           <span aria-hidden="true">▧</span>
           <h2>В этой папке пока нет фотографий</h2>
           <p>Добавьте первые изображения — после загрузки вы вернётесь в профиль персонажа.</p>
-          <a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Добавить фото</a>
+          {% if can_manage %}<a class="btn btn-success" href="{% url 'photos:character_gallery_upload' character.pk character.slug %}{% if current_folder %}?folder={{ current_folder|urlencode }}{% endif %}">Добавить фото</a>{% endif %}
         </section>
       {% endif %}
     </main>
+
+    {% if can_manage %}<dialog class="app-modal" id="createGalleryFolderModal">
+      <div class="app-modal-card">
+        <header class="app-modal-header">
+          <div><span class="character-page-eyebrow">Текущая галерея</span><h2>Создать папку</h2><p>Новая папка появится в открытом разделе.</p></div>
+          <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+        </header>
+        <form method="post" class="app-modal-body gallery-manager-form">
+          {% csrf_token %}<input type="hidden" name="action" value="gallery_create_folder">
+          <label><span>Название папки</span><input class="form-control" name="name" maxlength="180" required autocomplete="off" placeholder="Например, Официальные арты"></label>
+          <div class="gallery-manager-buttons"><button class="btn btn-outline-secondary" type="button" data-modal-close>Отмена</button><button class="btn btn-success" type="submit">Создать папку</button></div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog class="app-modal" id="manageGalleryEntryModal">
+      <div class="app-modal-card">
+        <header class="app-modal-header">
+          <div><span class="character-page-eyebrow" id="manageEntryKind">Элемент галереи</span><h2 id="manageEntryTitle">Управление</h2><p>Переименуйте или переместите элемент внутри галереи персонажа.</p></div>
+          <button class="app-modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+        </header>
+        <form method="post" class="app-modal-body gallery-manager-form" id="manageGalleryEntryForm">
+          {% csrf_token %}
+          <input type="hidden" name="source" id="manageEntrySource">
+          <input type="hidden" name="type" id="manageEntryType">
+          <label><span>Новое название</span><input class="form-control" name="name" id="manageEntryName" maxlength="220" required></label>
+          <button class="btn btn-success" type="submit" name="action" value="gallery_rename">Переименовать</button>
+          <div class="gallery-manager-divider"><span>или переместить</span></div>
+          <label><span>Папка назначения</span><select class="form-select" name="target">{% for option in folder_options %}<option value="{{ option.path }}">{{ option.label }}</option>{% endfor %}</select></label>
+          <button class="btn btn-outline-success" type="submit" name="action" value="gallery_move">Переместить</button>
+        </form>
+      </div>
+    </dialog>
+    {% endif %}
 
     <dialog class="character-gallery-viewer" id="characterGalleryViewer">
       <div class="character-gallery-viewer-head">
@@ -155,6 +200,17 @@
         if (event.key === "ArrowLeft") showMedia(currentIndex - 1);
         if (event.key === "ArrowRight") showMedia(currentIndex + 1);
       });
+
+      const manageDialog = document.querySelector("#manageGalleryEntryModal");
+      document.querySelectorAll("[data-manage-entry]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelector("#manageEntrySource").value = button.dataset.entryPath;
+        document.querySelector("#manageEntryType").value = button.dataset.entryType;
+        document.querySelector("#manageEntryName").value = button.dataset.entryName;
+        document.querySelector("#manageEntryTitle").textContent = button.dataset.entryName;
+        document.querySelector("#manageEntryKind").textContent = button.dataset.entryType === "folder" ? "Папка галереи" : "Файл галереи";
+        manageDialog.showModal();
+      }));
     </script>
+    <script src="{% static 'photos/modals.js' %}"></script>
   </body>
 </html>

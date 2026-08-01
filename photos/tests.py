@@ -174,6 +174,35 @@ class CharacterCreateExperienceTests(TestCase):
             (Path(self.temp_media.name) / eris.gallery_folder / "Arts" / "art.webp").is_file()
         )
 
+    def test_single_character_folder_with_one_image_can_be_uploaded(self):
+        url = f"{self.title.get_absolute_url()}characters/"
+        response = self.client.post(url, {
+            "action": "import_character_folders",
+            "gender": Character.Gender.FEMALE,
+            "importance": Character.Importance.SUPPORTING,
+            "use_first_photo": "on",
+            "folder_files": [
+                SimpleUploadedFile("augusta.jpg", b"image", content_type="image/jpeg"),
+            ],
+            "relative_paths": [
+                "Августа Фредерика Адель-Адлер/augusta.jpg",
+            ],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        character = Character.objects.get(
+            title=self.title,
+            name="Августа Фредерика Адель-Адлер",
+        )
+        self.assertTrue(character.portrait_path.endswith("/augusta.jpg"))
+        self.assertTrue((Path(self.temp_media.name) / character.portrait_path).is_file())
+
+    def test_folder_import_script_uses_real_form_url(self):
+        response = self.client.get(f"{self.title.get_absolute_url()}characters/")
+
+        self.assertContains(response, 'folderImportForm.getAttribute("action")')
+        self.assertNotContains(response, "fetch(folderImportForm.action")
+
     def test_folder_import_rejects_paths_outside_media_library(self):
         response = self.client.post(
             f"{self.title.get_absolute_url()}characters/",
@@ -237,6 +266,79 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertContains(nested, "art.jpg")
         self.assertContains(nested, "Арты")
 
+    def test_character_gallery_can_create_rename_and_move_entries(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Галерея",
+            gallery_folder="Catalog/character-studio/female/gallery-manager",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        gallery.mkdir(parents=True)
+        (gallery / "photo.jpg").write_bytes(b"image")
+        url = f"{character.get_absolute_url()}gallery/"
+
+        created = self.client.post(url, {"action": "gallery_create_folder", "name": "Арты"})
+        self.assertEqual(created.status_code, 302)
+        self.assertTrue((gallery / "Арты").is_dir())
+
+        renamed = self.client.post(url, {
+            "action": "gallery_rename",
+            "source": "Арты",
+            "type": "folder",
+            "name": "Официальные арты",
+        })
+        self.assertEqual(renamed.status_code, 302)
+        self.assertTrue((gallery / "Официальные арты").is_dir())
+
+        moved = self.client.post(url, {
+            "action": "gallery_move",
+            "source": "photo.jpg",
+            "type": "file",
+            "target": "Официальные арты",
+        })
+        self.assertEqual(moved.status_code, 302)
+        self.assertTrue((gallery / "Официальные арты" / "photo.jpg").is_file())
+
+    def test_character_gallery_cannot_manage_another_gallery(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Safe Gallery",
+            gallery_folder="Catalog/character-studio/female/safe-gallery",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        gallery.mkdir(parents=True)
+        outside = Path(self.temp_media.name) / "outside.jpg"
+        outside.write_bytes(b"image")
+
+        response = self.client.post(f"{character.get_absolute_url()}gallery/", {
+            "action": "gallery_rename",
+            "source": "../../../../outside.jpg",
+            "type": "file",
+            "name": "stolen.jpg",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "за пределами галереи")
+        self.assertTrue(outside.exists())
+
+    def test_gallery_is_public_but_management_controls_are_admin_only(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Public Gallery",
+            gallery_folder="Catalog/character-studio/female/public-gallery",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        gallery.mkdir(parents=True)
+        (gallery / "public.jpg").write_bytes(b"image")
+        self.client.logout()
+
+        response = self.client.get(f"{character.get_absolute_url()}gallery/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "public.jpg")
+        self.assertNotContains(response, "Новая папка")
+        self.assertNotContains(response, 'class="character-gallery-manage file-manage"')
+
     def test_gallery_upload_returns_to_character_profile(self):
         character = Character.objects.create(
             title=self.title,
@@ -296,6 +398,16 @@ class TitleCatalogMetadataTests(TestCase):
         self.assertNotContains(response, self.romance.name)
         self.assertContains(response, "Сортировка")
         self.assertContains(response, "Жанры")
+
+    def test_catalog_is_alphabetical_by_default_ignoring_case(self):
+        Title.objects.create(name="alpha Story")
+        Title.objects.create(name="Beta Story")
+
+        response = self.client.get("/titles/")
+        names = [title.name for title in response.context["titles"]]
+
+        self.assertEqual(names, sorted(names, key=lambda name: (name.lower(), name)))
+        self.assertEqual(response.context["sort"], "name")
 
     def test_create_form_saves_optional_genres_and_themes(self):
         response = self.client.post("/titles/", {

@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Каталог — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260731-catalog">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body>
+    {% include 'photos/_app_navbar.html' %}
     <main class="catalog-shell">
       <header class="catalog-header catalog-hero">
         <div class="catalog-hero-copy">
@@ -89,11 +90,11 @@
           <label class="catalog-sort">
             <span>Сортировка</span>
             <select class="form-select" name="sort" form="catalogFilterForm">
+              <option value="name" {% if sort == "name" %}selected{% endif %}>По алфавиту</option>
               <option value="updated" {% if sort == "updated" %}selected{% endif %}>Недавно обновлённые</option>
               <option value="score" {% if sort == "score" %}selected{% endif %}>По оценке</option>
               <option value="year" {% if sort == "year" %}selected{% endif %}>По году</option>
               <option value="characters" {% if sort == "characters" %}selected{% endif %}>По персонажам</option>
-              <option value="name" {% if sort == "name" %}selected{% endif %}>По алфавиту</option>
             </select>
           </label>
 

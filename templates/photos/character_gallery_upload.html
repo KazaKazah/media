@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Добавить фото — {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-character-gallery-albums1">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body class="character-upload-page">
+    {% include 'photos/_app_navbar.html' %}
     <main class="character-upload-shell">
       <nav class="detail-nav">
         <a href="{{ character.get_absolute_url }}">← Профиль персонажа</a>

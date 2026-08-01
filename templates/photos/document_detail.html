@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ document.title }} - Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body class="document-reader-page">
+    {% include 'photos/_app_navbar.html' %}
     <main class="reader-shell">
       <nav class="detail-nav reader-nav">
         <a href="{% url 'photos:documents' %}">Назад к документам</a>

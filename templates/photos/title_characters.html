@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Персонажи — {{ title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260720-characters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260801-gallery-manager">
   </head>
   <body>
+    {% include 'photos/_app_navbar.html' %}
     <main class="catalog-shell">
       <nav class="detail-nav">
         <a href="{{ title.get_absolute_url }}">← {{ title.name }}</a>
@@ -359,7 +360,7 @@
           });
           selection.textContent = `Загрузка ${selectedFolderFiles.length} файлов…`;
           folderImportForm.querySelectorAll("button").forEach((button) => button.disabled = true);
-          fetch(folderImportForm.action || window.location.href, {
+          fetch(folderImportForm.getAttribute("action") || window.location.href, {
             method: "POST",
             body: payload,
             credentials: "same-origin",

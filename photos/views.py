@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models.functions import Lower
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -314,7 +315,7 @@ def index(request):
             selected_years.append(int(value))
         except ValueError:
             continue
-    sort = request.GET.get("sort", "updated")
+    sort = request.GET.get("sort", "name")
     sort_fields = {
         "updated": "-updated_at",
         "name": "name",
@@ -351,10 +352,11 @@ def index(request):
         titles = titles.filter(genres__icontains=genre)
     for theme in selected_themes:
         titles = titles.filter(themes__icontains=theme)
-    titles = titles.annotate(character_count=Count("characters", distinct=True)).order_by(
-        sort_fields.get(sort, "-updated_at"),
-        "name",
-    )
+    titles = titles.annotate(character_count=Count("characters", distinct=True))
+    if sort == "name" or sort not in sort_fields:
+        titles = titles.order_by(Lower("name"), "name")
+    else:
+        titles = titles.order_by(sort_fields[sort], Lower("name"), "name")
     form = TitleForm()
     if request.method == "POST":
         if not user_can_manage(request.user):
@@ -368,7 +370,7 @@ def index(request):
         "form": form,
         "kind": kind,
         "query": query,
-        "sort": sort if sort in sort_fields else "updated",
+        "sort": sort if sort in sort_fields else "name",
         "title_kinds": Title.Kind.choices,
         "format_choices": Title.Format.choices,
         "status_choices": Title.ReleaseStatus.choices,
@@ -804,23 +806,82 @@ def character_gallery_location(character: Character, requested_folder: str = "")
     return base_rel, base_path, subfolder, current_rel
 
 
+def character_gallery_entry(character: Character, relative_path: str):
+    base_rel, base_path, _, _ = character_gallery_location(character)
+    try:
+        clean = library.normalize_relative(relative_path)
+    except SuspiciousFileOperation as error:
+        raise SuspiciousFileOperation("Элемент находится за пределами галереи персонажа") from error
+    full_rel = f"{base_rel}/{clean}" if clean else base_rel
+    full_rel, full_path = library.resolve_media_path(full_rel)
+    try:
+        full_path.relative_to(base_path)
+    except ValueError as error:
+        raise SuspiciousFileOperation("Элемент находится за пределами галереи персонажа") from error
+    if full_path == base_path:
+        raise SuspiciousFileOperation("Корневую папку галереи изменять нельзя")
+    return full_rel, full_path
+
+
+def character_gallery_folder_options(character: Character):
+    _, base_path, _, _ = character_gallery_location(character)
+    options = [{"path": "", "label": "Все фото (корень галереи)"}]
+    for root, directory_names, _ in os.walk(base_path):
+        directory_names[:] = sorted(
+            (name for name in directory_names if not name.startswith(".") and name != "#recycle"),
+            key=str.casefold,
+        )
+        for name in directory_names:
+            folder = Path(root) / name
+            relative = folder.relative_to(base_path).as_posix()
+            options.append({"path": relative, "label": relative.replace("/", " › ")})
+    return options
+
+
 @ensure_csrf_cookie
-@admin_required
 def character_gallery(request, character_id, character_slug):
     character = get_object_or_404(
         Character.objects.select_related("title"),
         pk=character_id,
         slug=character_slug,
     )
+    operation_error = ""
     base_rel, _, subfolder, current_rel = character_gallery_location(
         character,
         request.GET.get("folder", ""),
     )
+    if request.method == "POST":
+        if not user_can_manage(request.user):
+            raise PermissionDenied("Управлять галереей может только администратор")
+        action = request.POST.get("action", "")
+        try:
+            if action == "gallery_create_folder":
+                library.create_folder(current_rel, request.POST.get("name", ""))
+            elif action == "gallery_rename":
+                source_rel, _ = character_gallery_entry(character, request.POST.get("source", ""))
+                library.rename_entry(source_rel, request.POST.get("name", ""), request.POST.get("type", "file"))
+            elif action == "gallery_move":
+                source_rel, _ = character_gallery_entry(character, request.POST.get("source", ""))
+                _, _, _, target_rel = character_gallery_location(character, request.POST.get("target", ""))
+                library.move_entry(source_rel, target_rel, request.POST.get("type", "file"))
+            else:
+                raise ValueError("Неизвестная операция с галереей")
+        except (ValueError, OSError, SuspiciousFileOperation) as error:
+            operation_error = str(error)
+        else:
+            target = reverse("photos:character_gallery", kwargs={
+                "character_id": character.pk,
+                "character_slug": character.slug,
+            })
+            suffix = f"?folder={quote(subfolder)}&changed=1" if subfolder else "?changed=1"
+            return redirect(f"{target}{suffix}")
     listing = library.list_folder(current_rel, 0, 200)
     files = list(listing["files"])
     while listing["hasMore"]:
         listing = library.list_folder(current_rel, listing["nextOffset"], 200)
         files.extend(listing["files"])
+    for file in files:
+        file["relative"] = file["path"][len(base_rel):].lstrip("/")
 
     folders = []
     for folder in library.list_folder(current_rel, 0, 1)["folders"]:
@@ -846,11 +907,14 @@ def character_gallery(request, character_id, character_slug):
 
     return render(request, "photos/character_gallery.html", {
         "breadcrumbs": breadcrumbs,
+        "can_manage": user_can_manage(request.user),
         "character": character,
         "current_folder": subfolder,
         "files": files,
         "folders": folders,
+        "folder_options": character_gallery_folder_options(character),
         "image_count": sum(file["type"] == "image" for file in files),
+        "operation_error": operation_error,
         "video_count": sum(file["type"] == "video" for file in files),
     })
 
