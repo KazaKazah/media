@@ -5384,7 +5384,8 @@ body.app-modal-open {
   backdrop-filter: blur(12px);
 }
 
-.character-gender-tabs {
+.character-gender-tabs,
+.character-faction-tabs {
   display: flex;
   gap: .45rem;
   margin: .75rem 0;
@@ -5394,7 +5395,8 @@ body.app-modal-open {
   background: rgba(255, 253, 250, .9);
 }
 
-.character-gender-tabs button {
+.character-gender-tabs button,
+.character-faction-tabs button {
   display: flex;
   gap: .4rem;
   align-items: center;
@@ -5407,15 +5409,17 @@ body.app-modal-open {
   font-weight: 800;
 }
 
-.character-gender-tabs button.active {
+.character-gender-tabs button.active,
+.character-faction-tabs button.active {
   background: #1f7a6d;
   color: #fff;
   box-shadow: 0 .35rem .9rem rgba(31, 122, 109, .2);
 }
 
 .character-gender-tabs button i { font-size: 1.05rem; font-style: normal; }
-.character-gender-tabs button span { border-radius: 999px; padding: .08rem .38rem; background: rgba(120,140,132,.12); font-size: .68rem; }
-.character-gender-tabs button.active span { background: rgba(255,255,255,.18); }
+.character-gender-tabs button span, .character-faction-tabs button span { border-radius: 999px; padding: .08rem .38rem; background: rgba(120,140,132,.12); font-size: .68rem; }
+.character-gender-tabs button.active span, .character-faction-tabs button.active span { background: rgba(255,255,255,.18); }
+.character-faction-tabs > span { align-self: center; padding: 0 .45rem; color: #66766f; font-size: .72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
 
 .character-bulk-editor {
   display: grid;
@@ -6416,8 +6420,8 @@ body.app-modal-open {
 }
 
 @media (max-width: 640px) {
-  .character-gender-tabs { overflow-x: auto; }
-  .character-gender-tabs button { flex: 0 0 auto; }
+  .character-gender-tabs, .character-faction-tabs { overflow-x: auto; }
+  .character-gender-tabs button, .character-faction-tabs button { flex: 0 0 auto; }
   .character-bulk-editor { grid-template-columns: 1fr 1fr; top: 62px; }
   .character-bulk-editor .form-select, .character-bulk-text, .character-bulk-editor .btn { grid-column: 1 / -1; }
 }

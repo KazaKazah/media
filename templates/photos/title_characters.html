@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Персонажи — {{ title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-fluid-layout">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -63,6 +63,14 @@
         <button type="button" data-gender-filter="male"><i>♂</i> Мужские <span>{{ male_characters|length }}</span></button>
         {% if other_gender_characters %}<button type="button" data-gender-filter="other">Другие <span>{{ other_gender_characters|length }}</span></button>{% endif %}
       </nav>
+      {% if title.kind == "game" %}
+        <nav class="character-faction-tabs" id="characterFactionTabs" aria-label="Фильтр игровых персонажей по фракции">
+          <span>Фракции</span>
+          <button class="active" type="button" data-faction-filter="all">Все</button>
+          {% for faction in factions %}<button type="button" data-faction-filter="{{ faction }}">{{ faction }}</button>{% endfor %}
+          <button type="button" data-faction-filter="">Без фракции</button>
+        </nav>
+      {% endif %}
 
       {% if can_manage %}
         <form class="character-bulk-editor" id="characterBulkEditor" method="post">
@@ -73,6 +81,7 @@
           <select class="form-select" name="bulk_importance"><option value="">Роль в сюжете: не изменять</option>{% for value, label in importance_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
           <label class="character-bulk-text"><input type="checkbox" name="apply_role"><input name="bulk_role" maxlength="120" placeholder="Изменить текстовую роль"></label>
           <label class="character-bulk-text"><input type="checkbox" name="apply_race"><input name="bulk_race" maxlength="160" placeholder="Изменить расу"></label>
+          {% if title.kind == "game" %}<label class="character-bulk-text"><input type="checkbox" name="apply_faction"><input name="bulk_faction" maxlength="160" placeholder="Изменить фракцию"></label>{% endif %}
           <button class="btn btn-success" id="characterBulkSubmit" type="submit" disabled>Применить</button>
         </form>
       {% endif %}
@@ -82,7 +91,8 @@
           <article class="directory-character-card"
                    data-importance="{{ character.importance }}"
                    data-gender="{{ character.gender }}"
-                   data-search="{{ character.name }} {{ character.original_name }} {{ character.role }} {{ character.race }}">
+                   data-faction="{{ character.faction }}"
+                   data-search="{{ character.name }} {{ character.original_name }} {{ character.role }} {{ character.race }} {{ character.faction }}">
             {% if can_manage %}<label class="directory-character-selector" title="Выбрать {{ character.name }}"><input form="characterBulkEditor" type="checkbox" name="characters" value="{{ character.id }}"><span>✓</span></label>{% endif %}
             <a class="directory-character-image" href="{{ character.get_absolute_url }}">
               {% if character.portrait_path %}
@@ -99,6 +109,7 @@
                 {% if character.role %}<div><dt>Роль</dt><dd>{{ character.role }}</dd></div>{% endif %}
                 <div><dt>Пол</dt><dd>{{ character.get_gender_display }}</dd></div>
                 {% if character.race %}<div><dt>Раса</dt><dd>{{ character.race }}</dd></div>{% endif %}
+                {% if title.kind == "game" and character.faction %}<div><dt>Фракция</dt><dd>{{ character.faction }}</dd></div>{% endif %}
               </dl>
               <a class="directory-character-open" href="{{ character.get_absolute_url }}">Открыть профиль →</a>
             </div>
@@ -148,7 +159,7 @@
             </div>
             <div class="character-form-grid">
               {% for field in form %}
-                {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" or field.name == "portrait_upload" %}
+                {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" or field.name == "portrait_upload" or field.name == "faction" and title.kind == "game" %}
                   <div class="character-field{% if field.name == "name" or field.name == "portrait_upload" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
                     <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span>*</span>{% endif %}</label>
                     {{ field }}
@@ -235,6 +246,10 @@
                   <label for="{{ import_form.importance.id_for_label }}">{{ import_form.importance.label }}</label>
                   {{ import_form.importance }}{{ import_form.importance.errors }}
                 </div>
+                {% if title.kind == "game" %}<div class="character-field">
+                  <label for="{{ import_form.faction.id_for_label }}">{{ import_form.faction.label }}</label>
+                  {{ import_form.faction }}{% if import_form.faction.help_text %}<small>{{ import_form.faction.help_text }}</small>{% endif %}{{ import_form.faction.errors }}
+                </div>{% endif %}
               </div>
               <label class="character-gallery-toggle">
                 {{ import_form.use_first_photo }}
@@ -252,9 +267,11 @@
       const search = document.querySelector("#directorySearch");
       const filters = [...document.querySelectorAll("[data-filter]")];
       const genderFilters = [...document.querySelectorAll("[data-gender-filter]")];
+      const factionFilters = [...document.querySelectorAll("[data-faction-filter]")];
       const empty = document.querySelector("#charactersFilterEmpty");
       let activeFilter = "all";
       let activeGender = "all";
+      let activeFaction = "all";
 
       const filterCharacters = () => {
         const query = search.value.trim().toLocaleLowerCase("ru");
@@ -262,8 +279,9 @@
         directoryCards.forEach((card) => {
           const matchesFilter = activeFilter === "all" || card.dataset.importance === activeFilter;
           const matchesGender = activeGender === "all" || card.dataset.gender === activeGender;
+          const matchesFaction = activeFaction === "all" || card.dataset.faction === activeFaction;
           const matchesSearch = !query || card.dataset.search.toLocaleLowerCase("ru").includes(query);
-          card.hidden = !(matchesFilter && matchesGender && matchesSearch);
+          card.hidden = !(matchesFilter && matchesGender && matchesFaction && matchesSearch);
           if (!card.hidden) visible += 1;
         });
         empty.hidden = visible > 0;
@@ -280,6 +298,13 @@
         genderFilters.forEach((item) => item.classList.remove("active"));
         button.classList.add("active");
         activeGender = button.dataset.genderFilter;
+        filterCharacters();
+        updateCharacterSelection?.();
+      }));
+      factionFilters.forEach((button) => button.addEventListener("click", () => {
+        factionFilters.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        activeFaction = button.dataset.factionFilter;
         filterCharacters();
         updateCharacterSelection?.();
       }));

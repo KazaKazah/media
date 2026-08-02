@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ character.name }} — {{ character.title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-fluid-layout">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -69,6 +69,7 @@
             <small id="characterLiveOriginal">{{ character.original_name }}</small>
             <p id="characterLiveRole">{% if character.role %}{{ character.role }}{% else %}Роль не указана{% endif %}</p>
             {% if character.race %}<span class="character-race-chip" id="characterLiveRace">{{ character.race }}</span>{% else %}<span class="character-race-chip muted" id="characterLiveRace">Раса не указана</span>{% endif %}
+            {% if character.title.kind == "game" %}<span class="character-race-chip{% if not character.faction %} muted{% endif %}" id="characterLiveFaction">{% if character.faction %}{{ character.faction }}{% else %}Фракция не указана{% endif %}</span>{% endif %}
           </div>
 
           {% if can_manage or character.height or character.weight or character.eye_color or character.hair_color or character.bust or character.waist or character.hips %}
@@ -126,7 +127,7 @@
                 </div>
                 <div class="character-form-grid">
                   {% for field in form %}
-                    {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" %}
+                    {% if field.name == "name" or field.name == "original_name" or field.name == "gender" or field.name == "importance" or field.name == "role" or field.name == "race" or field.name == "faction" and character.title.kind == "game" %}
                       <div class="character-field{% if field.name == "name" %} character-field-wide{% endif %}{% if field.errors %} has-error{% endif %}">
                         <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span>*</span>{% endif %}</label>
                         {{ field }}
@@ -212,11 +213,12 @@
             </div>
             <dl class="character-readonly">
               {% if character.race %}<div><dt>Раса</dt><dd>{{ character.race }}</dd></div>{% endif %}
+              {% if character.title.kind == "game" and character.faction %}<div><dt>Фракция</dt><dd>{{ character.faction }}</dd></div>{% endif %}
               {% if character.body %}<div><dt>Тело</dt><dd>{{ character.body }}</dd></div>{% endif %}
               {% if character.features %}<div><dt>Особенности</dt><dd>{{ character.features }}</dd></div>{% endif %}
               {% if character.abilities %}<div><dt>Способности</dt><dd>{{ character.abilities }}</dd></div>{% endif %}
               {% if character.notes %}<div><dt>Заметки</dt><dd>{{ character.notes }}</dd></div>{% endif %}
-              {% if not character.race and not character.body and not character.features and not character.abilities and not character.notes %}
+              {% if not character.race and not character.faction and not character.body and not character.features and not character.abilities and not character.notes %}
                 <p class="text-secondary">Дополнительная информация пока не заполнена.</p>
               {% endif %}
             </dl>
@@ -306,6 +308,11 @@
             if (race) {
               race.textContent = valueOf("race") || "Раса не указана";
               race.classList.toggle("muted", !valueOf("race"));
+            }
+            const faction = document.querySelector("#characterLiveFaction");
+            if (faction) {
+              faction.textContent = valueOf("faction") || "Фракция не указана";
+              faction.classList.toggle("muted", !valueOf("faction"));
             }
 
             document.querySelectorAll("[data-fact]").forEach((fact) => {

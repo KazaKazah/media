@@ -300,6 +300,50 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertContains(page, 'data-gender-filter="male"')
         self.assertContains(page, 'data-gender="male"')
 
+    def test_game_characters_can_be_filtered_and_bulk_updated_by_faction(self):
+        game = Title.objects.create(name="Faction Game", kind=Title.Kind.GAME)
+        alliance = Character.objects.create(title=game, name="Alliance Hero", faction="Альянс")
+        Character.objects.create(title=game, name="Empire Hero", faction="Империя")
+
+        page = self.client.get(f"{game.get_absolute_url()}characters/")
+        self.assertContains(page, 'id="characterFactionTabs"')
+        self.assertContains(page, 'data-faction-filter="Альянс"')
+        self.assertContains(page, 'data-faction="Империя"')
+
+        response = self.client.post(f"{game.get_absolute_url()}characters/", {
+            "action": "bulk_update_characters",
+            "characters": [str(alliance.pk)],
+            "apply_faction": "on",
+            "bulk_faction": "Нейтральные",
+        })
+        alliance.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(alliance.faction, "Нейтральные")
+
+        anime_page = self.client.get(f"{self.title.get_absolute_url()}characters/")
+        self.assertNotContains(anime_page, 'id="characterFactionTabs"')
+
+    def test_folder_import_applies_one_faction_to_all_game_characters(self):
+        game = Title.objects.create(name="Imported Game", kind=Title.Kind.GAME)
+        source = Path(self.temp_media.name) / "Game imports"
+        (source / "Hero One").mkdir(parents=True)
+        (source / "Hero Two").mkdir()
+        (source / "Hero One" / "one.jpg").write_bytes(b"image")
+        (source / "Hero Two" / "two.jpg").write_bytes(b"image")
+
+        response = self.client.post(f"{game.get_absolute_url()}characters/", {
+            "action": "import_character_folders",
+            "source_folder": "Game imports",
+            "gender": Character.Gender.FEMALE,
+            "importance": Character.Importance.SUPPORTING,
+            "faction": "Орден света",
+            "use_first_photo": "on",
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(game.characters.count(), 2)
+        self.assertFalse(game.characters.exclude(faction="Орден света").exists())
+
     def test_folder_import_rejects_paths_outside_media_library(self):
         response = self.client.post(
             f"{self.title.get_absolute_url()}characters/",
@@ -758,9 +802,9 @@ class TodoListTests(TestCase):
         self.assertEqual(decrypt_note(payload, "password"), "Защищённый текст")
         with self.assertRaises(NoteDecryptionError):
             decrypt_note(payload, "wrong")
-        replacement = "A" if payload[-2] != "A" else "B"
+        replacement = "A" if payload[20] != "A" else "B"
         with self.assertRaises(NoteDecryptionError):
-            decrypt_note(payload[:-2] + replacement + payload[-1], "password")
+            decrypt_note(payload[:20] + replacement + payload[21:], "password")
 
 
 class TextDocumentTests(TestCase):

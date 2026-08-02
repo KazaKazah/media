@@ -146,6 +146,7 @@ class Character(models.Model):
     )
     role = models.CharField("Роль", max_length=120, blank=True)
     race = models.CharField("Раса", max_length=160, blank=True)
+    faction = models.CharField("Фракция", max_length=160, blank=True)
     height = models.CharField("Рост", max_length=80, blank=True)
     weight = models.CharField("Вес", max_length=80, blank=True)
     eye_color = models.CharField("Цвет глаз", max_length=120, blank=True)

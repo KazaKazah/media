@@ -86,6 +86,7 @@ class CharacterForm(forms.ModelForm):
             "importance",
             "role",
             "race",
+            "faction",
             "height",
             "weight",
             "eye_color",
@@ -134,6 +135,7 @@ class CharacterCreateForm(CharacterForm):
             "original_name": forms.TextInput(attrs={"placeholder": "Например, 赤夜 萌香 / Moka Akashiya"}),
             "role": forms.TextInput(attrs={"placeholder": "Главная героиня, антагонист…"}),
             "race": forms.TextInput(attrs={"placeholder": "Человек, вампир, демон…"}),
+            "faction": forms.TextInput(attrs={"placeholder": "Например, Альянс, Империя, Нейтральные"}),
             "height": forms.TextInput(attrs={"placeholder": "Например, 168 см"}),
             "weight": forms.TextInput(attrs={"placeholder": "Например, 52 кг"}),
             "eye_color": forms.TextInput(attrs={"placeholder": "Например, зелёные"}),
@@ -173,6 +175,16 @@ class CharacterFolderImportForm(forms.Form):
         choices=Character.Importance.choices,
         initial=Character.Importance.SUPPORTING,
         widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    faction = forms.CharField(
+        label="Фракция для новых персонажей",
+        max_length=160,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Например, Альянс",
+        }),
+        help_text="Применится ко всем персонажам из выбранных папок.",
     )
     use_first_photo = forms.BooleanField(
         label="Использовать первое фото как портрет",

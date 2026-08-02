@@ -699,6 +699,8 @@ def title_characters(request, slug):
                     updates["role"] = request.POST.get("bulk_role", "").strip()[:120]
                 if request.POST.get("apply_race"):
                     updates["race"] = request.POST.get("bulk_race", "").strip()[:160]
+                if request.POST.get("apply_faction"):
+                    updates["faction"] = request.POST.get("bulk_faction", "").strip()[:160]
                 if not updates:
                     bulk_error = "Выберите хотя бы одно поле для изменения."
                 else:
@@ -753,6 +755,10 @@ def title_characters(request, slug):
             output_field=IntegerField(),
         )
     ).order_by("importance_rank", "name")
+    factions = sorted(
+        {value.strip() for value in characters.values_list("faction", flat=True) if value.strip()},
+        key=str.casefold,
+    ) if title.kind == Title.Kind.GAME else []
     return render(request, "photos/title_characters.html", {
         "can_manage": user_can_manage(request.user),
         "bulk_error": bulk_error,
@@ -768,6 +774,7 @@ def title_characters(request, slug):
         "other_gender_characters": characters.filter(gender=Character.Gender.OTHER),
         "gender_choices": Character.Gender.choices,
         "importance_choices": Character.Importance.choices,
+        "factions": factions,
     })
 
 
@@ -836,6 +843,7 @@ def import_character_folders(title: Title, cleaned_data: dict) -> tuple[int, int
             name=name,
             gender=cleaned_data["gender"],
             importance=cleaned_data["importance"],
+            faction=cleaned_data.get("faction", ""),
             gallery_folder=folder.resolve().relative_to(media_root).as_posix(),
             portrait_path=(first_image_relative(folder) if cleaned_data.get("use_first_photo") else ""),
         )
@@ -902,6 +910,7 @@ def import_uploaded_character_folders(
             name=name,
             gender=cleaned_data["gender"],
             importance=cleaned_data["importance"],
+            faction=cleaned_data.get("faction", ""),
             gallery_folder=gallery,
             portrait_path=portrait if cleaned_data.get("use_first_photo") else "",
         )
