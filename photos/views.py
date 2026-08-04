@@ -496,6 +496,10 @@ def index(request):
     }
     if kind in Title.Kind.values:
         titles = titles.filter(kind=kind)
+    else:
+        # Adult-category titles stay out of the general catalog until the user
+        # explicitly selects that category in the top-level type switcher.
+        titles = titles.exclude(kind=Title.Kind.HENTAI)
     if query:
         titles = titles.filter(
             Q(name__icontains=query)
@@ -590,10 +594,12 @@ def title_detail(request, slug):
             output_field=IntegerField(),
         )
     ).order_by("importance_rank", "name")
+    guide_character = characters.exclude(portrait_path="").first() or characters.first()
     return render(request, "photos/title_detail.html", {
         "can_manage": user_can_manage(request.user),
         "title": title,
         "character_preview": characters,
+        "guide_character": guide_character,
     })
 
 

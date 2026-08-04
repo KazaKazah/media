@@ -13,7 +13,7 @@
     {% if request.user.is_authenticated %}
       <details class="profile-menu">
         <summary>
-          <span class="profile-menu-avatar">{% if request.user.profile.avatar_path %}<img src="/media/{{ request.user.profile.avatar_path }}" alt="">{% else %}{{ request.user.username|slice:':1'|upper }}{% endif %}</span>
+          <span class="profile-menu-avatar">{% if request.user.profile.avatar_path %}<img src="{% url 'photos:media' relative_path=request.user.profile.avatar_path %}" alt="">{% else %}{{ request.user.username|slice:':1'|upper }}{% endif %}</span>
           <span class="profile-menu-name">{% if request.user.profile.display_name %}{{ request.user.profile.display_name }}{% else %}{{ request.user.username }}{% endif %}</span>
           <i>⌄</i>
         </summary>

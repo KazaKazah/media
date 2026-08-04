@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ character.name }} — {{ character.title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -44,7 +44,7 @@
           <div class="character-large-portrait" id="characterPortraitStage">
             {% if can_manage %}<div class="character-portrait-drop-hint" id="characterPortraitDropHint"><strong>Отпустите фото здесь</strong><small>Оно станет портретом персонажа</small></div>{% endif %}
             {% if character.portrait_path %}
-              <img id="characterPortraitImage" src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
+              <img id="characterPortraitImage" src="{% url 'photos:media' relative_path=character.portrait_path %}" alt="{{ character.name }}">
             {% else %}
               <span id="characterPortraitInitial">{{ character.name|slice:":1" }}</span>
             {% endif %}
@@ -73,7 +73,7 @@
           </div>
 
           {% if can_manage or character.height or character.weight or character.eye_color or character.hair_color or character.bust or character.waist or character.hips %}
-            <dl class="character-facts character-live-facts">
+            <dl class="character-facts character-live-facts" id="characterFacts">
               <div data-fact="height"{% if not character.height %} hidden{% endif %}><dt>Рост</dt><dd>{{ character.height }}</dd></div>
               <div data-fact="weight"{% if not character.weight %} hidden{% endif %}><dt>Вес</dt><dd>{{ character.weight }}</dd></div>
               <div data-fact="eye_color"{% if not character.eye_color %} hidden{% endif %}><dt>Глаза</dt><dd>{{ character.eye_color }}</dd></div>
@@ -138,7 +138,7 @@
                 </div>
               </section>
 
-              <details class="character-editor-section" open>
+              <details class="character-editor-section" id="characterAppearance" open>
                 <summary class="character-editor-section-head">
                   <span>02</span>
                   <div><h3>Внешность</h3><p>Физические параметры и цвета</p></div>

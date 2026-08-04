@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Каталог — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -58,17 +58,18 @@
 
       <form class="catalog-search catalog-search-top" method="get" id="catalogFilterForm">
         <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Название, персонаж, жанр или тема">
-        <select class="form-select" name="kind">
+        <select class="form-select" name="kind" id="catalogKind" aria-label="Тип тайтла">
           <option value="">Все типы</option>
           {% for value, label in title_kinds %}
             <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
+        <button class="btn btn-outline-secondary catalog-filter-toggle" id="catalogFilterToggle" type="button" aria-controls="catalogFilters" aria-expanded="false">☰ Фильтры</button>
         <button class="btn btn-success" type="submit">Найти</button>
       </form>
 
-      <div class="catalog-browser">
-        <aside class="catalog-filters" id="catalogFilters">
+      <div class="catalog-browser" id="catalogBrowser">
+        <aside class="catalog-filters" id="catalogFilters" hidden>
           <div class="catalog-filter-heading">
             <div><strong>Фильтры</strong><small>Найдено: {{ titles|length }}</small></div>
             <a href="{% url 'photos:index' %}">Сбросить</a>
@@ -84,13 +85,13 @@
             </select>
           </label>
 
-          <details open><summary>Формат</summary><div class="catalog-filter-list">
+          <details><summary>Формат</summary><div class="catalog-filter-list">
             {% for value, label in format_choices %}<label><input form="catalogFilterForm" type="checkbox" name="format" value="{{ value }}" {% if value in selected_formats %}checked{% endif %}>{{ label }}</label>{% endfor %}
           </div></details>
-          <details open><summary>Статус</summary><div class="catalog-filter-list">
+          <details><summary>Статус</summary><div class="catalog-filter-list">
             {% for value, label in status_choices %}<label><input form="catalogFilterForm" type="checkbox" name="status" value="{{ value }}" {% if value in selected_statuses %}checked{% endif %}>{{ label }}</label>{% endfor %}
           </div></details>
-          {% if year_choices %}<details open><summary>Год</summary><div class="catalog-filter-list catalog-filter-scroll">
+          {% if year_choices %}<details><summary>Год</summary><div class="catalog-filter-list catalog-filter-scroll">
             {% for value in year_choices %}<label><input form="catalogFilterForm" type="checkbox" name="year" value="{{ value }}" {% if value in selected_years %}checked{% endif %}>{{ value }}</label>{% endfor %}
           </div></details>{% endif %}
           <details><summary>Сезон</summary><div class="catalog-filter-list">
@@ -102,7 +103,7 @@
           <details><summary>Аудитория</summary><div class="catalog-filter-list">
             {% for value, label in audience_choices %}<label><input form="catalogFilterForm" type="checkbox" name="audience" value="{{ value }}" {% if value in selected_audiences %}checked{% endif %}>{{ label }}</label>{% endfor %}
           </div></details>
-          <details open><summary>Жанры</summary><div class="catalog-filter-list catalog-filter-scroll">
+          <details><summary>Жанры</summary><div class="catalog-filter-list catalog-filter-scroll">
             {% for value, label in genre_choices %}<label><input form="catalogFilterForm" type="checkbox" name="genre" value="{{ value }}" {% if value in selected_genres %}checked{% endif %}>{{ label }}</label>{% endfor %}
           </div></details>
           <details><summary>Темы</summary><div class="catalog-filter-list catalog-filter-scroll">
@@ -119,7 +120,7 @@
                 {% if title.is_adult and not request.user.is_authenticated %}
                   <span class="adult-poster-mask"><strong>18+</strong><small>Войдите для просмотра</small></span>
                 {% elif title.poster_path %}
-                  <img src="/media/{{ title.poster_path }}" alt="" loading="lazy">
+                  <img src="{% url 'photos:media' relative_path=title.poster_path %}" alt="" loading="lazy">
                 {% else %}
                   <span class="poster-placeholder">{{ title.get_kind_display }}</span>
                 {% endif %}
@@ -144,7 +145,7 @@
               <div class="title-card-characters">
                 {% for character in title.characters.all|slice:":4" %}
                   <a href="{{ character.get_absolute_url }}" title="{{ character.name }}">
-                    {% if character.portrait_path %}<img src="/media/{{ character.portrait_path }}" alt="">{% else %}<span>{{ character.name|slice:":1" }}</span>{% endif %}
+                    {% if character.portrait_path %}<img src="{% url 'photos:media' relative_path=character.portrait_path %}" alt="">{% else %}<span>{{ character.name|slice:":1" }}</span>{% endif %}
                     <small>{{ character.name }}</small>
                   </a>
                 {% endfor %}
@@ -169,6 +170,19 @@
     </main>
     <script src="{% static 'photos/modals.js' %}"></script>
     <script>
+      const catalogFilterToggle = document.querySelector("#catalogFilterToggle");
+      const catalogFilters = document.querySelector("#catalogFilters");
+      const catalogBrowser = document.querySelector("#catalogBrowser");
+      catalogFilterToggle?.addEventListener("click", () => {
+        const willOpen = catalogFilters.hidden;
+        catalogFilters.hidden = !willOpen;
+        catalogBrowser.classList.toggle("has-open-filters", willOpen);
+        catalogFilterToggle.setAttribute("aria-expanded", String(willOpen));
+        catalogFilterToggle.textContent = willOpen ? "× Скрыть фильтры" : "☰ Фильтры";
+      });
+      document.querySelector("#catalogKind")?.addEventListener("change", (event) => {
+        event.currentTarget.form.requestSubmit();
+      });
       document.querySelectorAll("#catalogFilters input, #catalogFilters select").forEach((field) => {
         field.addEventListener("change", () => document.querySelector("#catalogFilterForm").requestSubmit());
       });

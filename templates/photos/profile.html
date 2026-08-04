@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Профиль — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
   </head>
   <body class="profile-page">
     {% include 'photos/_app_navbar.html' %}
@@ -14,7 +14,7 @@
       {% if request.GET.saved %}<div class="character-gallery-notice success">Профиль сохранён.</div>{% endif %}
       <header class="profile-hero">
         <div class="profile-avatar-large">
-          {% if profile.avatar_path %}<img src="/media/{{ profile.avatar_path }}" alt="">{% else %}<span>{{ request.user.username|slice:':1'|upper }}</span>{% endif %}
+          {% if profile.avatar_path %}<img src="{% url 'photos:media' relative_path=profile.avatar_path %}" alt="">{% else %}<span>{{ request.user.username|slice:':1'|upper }}</span>{% endif %}
         </div>
         <div><span class="character-page-eyebrow">Личный профиль</span><h1>{% if profile.display_name %}{{ profile.display_name }}{% else %}{{ request.user.username }}{% endif %}</h1><p>{{ request.user.email|default:"Добавьте информацию о себе — это необязательно." }}</p></div>
         <span class="profile-access-badge">{% if request.user.is_superuser %}Суперадминистратор{% elif request.user.is_staff %}Администратор{% else %}Пользователь{% endif %}</span>

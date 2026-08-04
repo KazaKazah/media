@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title.name }} — Drop and Tag</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -29,7 +29,7 @@
               <a class="btn btn-light btn-sm" href="{% url 'login' %}?next={{ request.path }}">Войти</a>
             </span>
           {% elif title.poster_path %}
-            <img src="/media/{{ title.poster_path }}" alt="{{ title.name }}">
+            <img src="{% url 'photos:media' relative_path=title.poster_path %}" alt="{{ title.name }}">
           {% else %}
             <span>{{ title.get_kind_display }}</span>
           {% endif %}
@@ -118,7 +118,7 @@
               <a class="title-character-tile" href="{{ character.get_absolute_url }}">
                 <span class="title-character-tile-image">
                   {% if character.portrait_path %}
-                    <img src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
+                    <img src="{% url 'photos:media' relative_path=character.portrait_path %}" alt="{{ character.name }}">
                   {% else %}
                     <span>{{ character.name|slice:":1" }}</span>
                   {% endif %}
@@ -141,7 +141,56 @@
         {% endif %}
       </section>
     </main>
+    {% if guide_character %}
+      <aside class="title-character-guide" id="titleCharacterGuide" data-storage-key="dropandtag:title-guide:{{ title.pk }}" aria-label="Помощник по персонажу">
+        <div class="title-character-guide-portrait" aria-hidden="true">
+          {% if guide_character.portrait_path and not title.is_adult or guide_character.portrait_path and request.user.is_authenticated %}
+            <img src="{% url 'photos:media' relative_path=guide_character.portrait_path %}" alt="">
+          {% else %}
+            <span>{{ guide_character.name|slice:":1" }}</span>
+          {% endif %}
+        </div>
+        <section class="title-character-guide-bubble">
+          <button class="title-character-guide-close" type="button" data-guide-close aria-label="Больше не показывать">×</button>
+          <small>{{ guide_character.name }} подсказывает</small>
+          <strong>Что хотите посмотреть?</strong>
+          <p>Я быстро проведу вас к данным персонажа.</p>
+          <nav>
+            <a href="{{ guide_character.get_absolute_url }}#characterAppearance">Размеры и внешность</a>
+            <a href="{{ guide_character.get_absolute_url }}#characterFacts">Раса и данные</a>
+            {% if guide_character.gallery_folder %}<a href="{% url 'photos:character_gallery' guide_character.pk guide_character.slug %}">Фотогалерея</a>{% endif %}
+            {% if can_manage %}<a href="{{ guide_character.get_absolute_url }}#characterEditorForm">Внести изменения</a>{% endif %}
+          </nav>
+        </section>
+      </aside>
+      <button class="title-character-guide-restore" id="titleCharacterGuideRestore" type="button" aria-label="Показать помощника">?</button>
+    {% endif %}
     <script src="{% static 'photos/modals.js' %}"></script>
+    {% if guide_character %}
+      <script>
+        (() => {
+          const guide = document.querySelector("#titleCharacterGuide");
+          const restore = document.querySelector("#titleCharacterGuideRestore");
+          if (!guide || !restore) return;
+          const key = guide.dataset.storageKey;
+          let hidden = false;
+          try { hidden = localStorage.getItem(key) === "hidden"; } catch (error) {}
+          guide.classList.toggle("is-hidden", hidden);
+          restore.classList.toggle("is-visible", hidden);
+          requestAnimationFrame(() => guide.classList.add("is-ready"));
+          guide.querySelector("[data-guide-close]")?.addEventListener("click", () => {
+            guide.classList.add("is-hidden");
+            restore.classList.add("is-visible");
+            try { localStorage.setItem(key, "hidden"); } catch (error) {}
+          });
+          restore.addEventListener("click", () => {
+            guide.classList.remove("is-hidden");
+            restore.classList.remove("is-visible");
+            try { localStorage.removeItem(key); } catch (error) {}
+          });
+        })();
+      </script>
+    {% endif %}
     {% if can_manage %}
       <script>
         const titleCover = document.querySelector("#titleCover");

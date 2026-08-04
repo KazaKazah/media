@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Персонажи — {{ title.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260802-game-factions">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
   </head>
   <body>
     {% include 'photos/_app_navbar.html' %}
@@ -30,7 +30,7 @@
 
       <header class="characters-directory-hero">
         <div class="characters-directory-poster">
-          {% if title.poster_path %}<img src="/media/{{ title.poster_path }}" alt="">{% else %}<span>{{ title.get_kind_display }}</span>{% endif %}
+          {% if title.poster_path %}<img src="{% url 'photos:media' relative_path=title.poster_path %}" alt="">{% else %}<span>{{ title.get_kind_display }}</span>{% endif %}
         </div>
         <div>
           <span class="character-page-eyebrow">{{ title.get_kind_display }} · база персонажей</span>
@@ -96,7 +96,7 @@
             {% if can_manage %}<label class="directory-character-selector" title="Выбрать {{ character.name }}"><input form="characterBulkEditor" type="checkbox" name="characters" value="{{ character.id }}"><span>✓</span></label>{% endif %}
             <a class="directory-character-image" href="{{ character.get_absolute_url }}">
               {% if character.portrait_path %}
-                <img src="/media/{{ character.portrait_path }}" alt="{{ character.name }}">
+                <img src="{% url 'photos:media' relative_path=character.portrait_path %}" alt="{{ character.name }}">
               {% else %}
                 <span>{{ character.name|slice:":1" }}</span>
               {% endif %}

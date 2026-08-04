@@ -65,7 +65,7 @@ class AdultTitleAccessTests(TestCase):
         self.assertTrue(self.title.is_adult)
 
     def test_guest_gets_mask_and_cannot_fetch_adult_poster(self):
-        catalog = self.client.get("/titles/")
+        catalog = self.client.get("/titles/", {"kind": Title.Kind.HENTAI})
         detail = self.client.get(self.title.get_absolute_url())
         media = self.client.get("/media/Covers/Titles/adult/poster.jpg")
 
@@ -126,6 +126,45 @@ class CharacterCreateExperienceTests(TestCase):
         self.title.refresh_from_db()
         self.assertTrue(self.title.poster_path.endswith("dragged-cover.jpg"))
         self.assertTrue((Path(self.temp_media.name) / self.title.poster_path).is_file())
+
+    def test_title_character_guide_links_to_character_tools(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Эрис",
+            race="Человек",
+            importance=Character.Importance.MAIN,
+            portrait_path="Characters/eris.webp",
+        )
+
+        page = self.client.get(self.title.get_absolute_url())
+
+        self.assertContains(page, 'id="titleCharacterGuide"')
+        self.assertContains(page, "Эрис подсказывает")
+        self.assertContains(page, f'{character.get_absolute_url()}#characterAppearance')
+        self.assertContains(page, f'{character.get_absolute_url()}#characterFacts')
+        self.assertContains(page, f'{character.get_absolute_url()}#characterEditorForm')
+
+    def test_portrait_url_encodes_hash_and_cyrillic_filename(self):
+        relative = "Covers/Characters/ЮриМария/#2523 Отсутствует имя файла.jpg"
+        absolute = Path(self.temp_media.name) / relative
+        absolute.parent.mkdir(parents=True)
+        absolute.write_bytes(b"jpeg")
+        character = Character.objects.create(
+            title=self.title,
+            name="ЮриМария",
+            portrait_path=relative,
+        )
+
+        page = self.client.get(character.get_absolute_url())
+
+        self.assertContains(page, "%232523%20")
+        self.assertNotContains(page, f'src="/media/{relative}"')
+        media_response = self.client.get(
+            "/media/Covers/Characters/%D0%AE%D1%80%D0%B8%D0%9C%D0%B0%D1%80%D0%B8%D1%8F/"
+            "%232523%20%D0%9E%D1%82%D1%81%D1%83%D1%82%D1%81%D1%82%D0%B2%D1%83%D0%B5%D1%82%20"
+            "%D0%B8%D0%BC%D1%8F%20%D1%84%D0%B0%D0%B9%D0%BB%D0%B0.jpg"
+        )
+        self.assertEqual(media_response.status_code, 200)
 
     def test_character_can_be_created_with_portrait_and_gallery(self):
         portrait = SimpleUploadedFile(
@@ -592,6 +631,32 @@ class TitleCatalogMetadataTests(TestCase):
 
         self.assertEqual(names, sorted(names, key=lambda name: (name.lower(), name)))
         self.assertEqual(response.context["sort"], "name")
+
+    def test_hentai_titles_are_only_visible_when_explicitly_selected(self):
+        hentai = Title.objects.create(name="Hidden adult title", kind=Title.Kind.HENTAI)
+
+        default_page = self.client.get("/titles/")
+        search_page = self.client.get("/titles/", {"q": "Hidden adult"})
+        hentai_page = self.client.get("/titles/", {"kind": Title.Kind.HENTAI})
+
+        self.assertNotContains(default_page, hentai.name)
+        self.assertNotContains(search_page, hentai.name)
+        self.assertContains(hentai_page, hentai.name)
+
+    def test_kind_selector_submits_catalog_filter_immediately(self):
+        response = self.client.get("/titles/")
+
+        self.assertContains(response, 'id="catalogKind"')
+        self.assertContains(response, 'document.querySelector("#catalogKind")')
+        self.assertContains(response, "event.currentTarget.form.requestSubmit()")
+
+    def test_sidebar_filters_and_sections_are_collapsed_by_default(self):
+        response = self.client.get("/titles/")
+
+        self.assertContains(response, 'id="catalogFilterToggle"')
+        self.assertContains(response, 'id="catalogFilters" hidden')
+        self.assertNotContains(response, "<details open>")
+        self.assertContains(response, "catalogFilters.hidden = !willOpen")
 
     def test_create_form_saves_optional_genres_and_themes(self):
         response = self.client.post("/titles/", {

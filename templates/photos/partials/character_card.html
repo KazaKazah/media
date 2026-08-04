@@ -2,7 +2,7 @@
   <a class="character-card-link" href="{{ character.get_absolute_url }}">
     <span class="character-portrait">
       {% if character.portrait_path %}
-        <img src="/media/{{ character.portrait_path }}" alt="">
+        <img src="{% url 'photos:media' relative_path=character.portrait_path %}" alt="">
       {% else %}
         <span>{{ character.name|slice:":1" }}</span>
       {% endif %}
