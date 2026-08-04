@@ -4,9 +4,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Добавить фото — {{ character.name }}</title>
+    <title>Добавить фото и видео — {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-video-library">
   </head>
   <body class="character-upload-page">
     {% include 'photos/_app_navbar.html' %}
@@ -20,7 +20,7 @@
         <header class="character-upload-modal-head">
           <div>
             <span class="character-page-eyebrow">{{ character.title.name }}</span>
-            <h1 id="characterUploadTitle">Добавить фото</h1>
+            <h1 id="characterUploadTitle">Добавить фото и видео</h1>
             <p>{{ character.name }}{% if current_folder %} · {{ current_folder }}{% endif %}</p>
           </div>
           <div class="character-upload-head-actions">
@@ -52,22 +52,22 @@
           <section class="character-upload-sources">
             <label class="character-upload-source primary" for="characterPhotos">
               <span aria-hidden="true">▧</span>
-              <strong>Выбрать отдельные фото</strong>
+              <strong>Выбрать фото или видео</strong>
               <small>Откроется системная галерея Android</small>
-              <input id="characterPhotos" name="photos" type="file" accept="image/*" multiple>
+              <input id="characterPhotos" name="photos" type="file" accept="image/*,video/*" multiple>
             </label>
             <label class="character-upload-source" for="characterPhotoFolder">
               <span aria-hidden="true">▰</span>
               <strong>Выбрать папку или альбом</strong>
-              <small>Через «Мои файлы» — все фото из выбранной папки</small>
-              <input id="characterPhotoFolder" name="photos" type="file" accept="image/*,.dropandtag-folder" webkitdirectory directory multiple>
+              <small>Через «Мои файлы» — все медиа из выбранной папки</small>
+              <input id="characterPhotoFolder" name="photos" type="file" accept="image/*,video/*,.dropandtag-folder" webkitdirectory directory multiple>
             </label>
           </section>
 
           <label class="character-upload-drop" for="characterPhotos" id="characterUploadDrop">
             <span aria-hidden="true">＋</span>
-            <strong>Также можно перетащить фотографии сюда</strong>
-            <small>JPG, PNG, GIF, WEBP или AVIF</small>
+            <strong>Также можно перетащить фото и видео сюда</strong>
+            <small>JPG, PNG, GIF, WEBP, MP4, MOV или WEBM</small>
           </label>
           <p class="character-upload-device-note">
             Веб-сайт не управляет вкладками системной галереи Samsung. Если в общей ленте трудно найти фото, используйте кнопку «Выбрать папку или альбом».
@@ -103,7 +103,7 @@
       const renderFiles = () => {
         clearPreviews();
         const files = [...input.files, ...folderInput.files].filter((file) =>
-          file.type.startsWith("image/") || /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i.test(file.name)
+          file.type.startsWith("image/") || file.type.startsWith("video/") || /\.(avif|bmp|gif|heic|heif|jpe?g|m4v|mov|mp4|png|webm|webp)$/i.test(file.name)
         );
         panel.hidden = files.length === 0;
         submit.disabled = files.length === 0;
@@ -115,10 +115,11 @@
           const url = URL.createObjectURL(file);
           previewUrls.push(url);
           const item = document.createElement("article");
-          const image = document.createElement("img");
+          const image = document.createElement(file.type.startsWith("video/") || /\.(m4v|mov|mp4|webm)$/i.test(file.name) ? "video" : "img");
           const name = document.createElement("small");
           image.src = url;
           image.alt = "";
+          if (image.tagName === "VIDEO") { image.muted = true; image.playsInline = true; image.preload = "metadata"; }
           name.textContent = file.name;
           item.append(image, name);
           grid.append(item);
@@ -146,7 +147,9 @@
       drop.addEventListener("drop", (event) => {
         event.preventDefault();
         const transfer = new DataTransfer();
-        [...event.dataTransfer.files].filter((file) => file.type.startsWith("image/")).forEach((file) => transfer.items.add(file));
+        [...event.dataTransfer.files].filter((file) =>
+          file.type.startsWith("image/") || file.type.startsWith("video/") || /\.(avif|bmp|gif|heic|heif|jpe?g|m4v|mov|mp4|png|webm|webp)$/i.test(file.name)
+        ).forEach((file) => transfer.items.add(file));
         input.files = transfer.files;
         folderInput.value = "";
         renderFiles();

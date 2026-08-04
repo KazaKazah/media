@@ -585,6 +585,39 @@ class CharacterCreateExperienceTests(TestCase):
         self.assertTrue((gallery / "new-photo.jpg").exists())
         self.assertFalse((gallery / "album-notes.txt").exists())
 
+    def test_character_gallery_accepts_and_autoplays_video(self):
+        character = Character.objects.create(
+            title=self.title,
+            name="Video Hero",
+            gallery_folder="Catalog/character-studio/female/video-hero",
+        )
+        gallery = Path(self.temp_media.name) / character.gallery_folder
+        gallery.mkdir(parents=True)
+        video = SimpleUploadedFile("scene.mp4", b"0123456789", content_type="video/mp4")
+
+        response = self.client.post(
+            f"{character.get_absolute_url()}gallery/upload/",
+            {"photos": [video]},
+        )
+
+        self.assertRedirects(response, f"{character.get_absolute_url()}?uploaded=1")
+        self.assertTrue((gallery / "scene.mp4").exists())
+        gallery_page = self.client.get(f"{character.get_absolute_url()}gallery/")
+        self.assertContains(gallery_page, "muted loop playsinline autoplay")
+
+    def test_video_library_upload_and_range_streaming(self):
+        upload = SimpleUploadedFile("long-video.mp4", b"0123456789", content_type="video/mp4")
+
+        response = self.client.post("/videos/", {"videos": [upload]})
+
+        self.assertRedirects(response, "/videos/?uploaded=1")
+        page = self.client.get("/videos/")
+        self.assertContains(page, "long-video.mp4")
+        stream = self.client.get("/media/Videos/long-video.mp4", HTTP_RANGE="bytes=2-5")
+        self.assertEqual(stream.status_code, 206)
+        self.assertEqual(stream["Content-Range"], "bytes 2-5/10")
+        self.assertEqual(b"".join(stream.streaming_content), b"2345")
+
 
 class TitleCatalogMetadataTests(TestCase):
     def setUp(self):

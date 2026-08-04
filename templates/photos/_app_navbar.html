@@ -6,6 +6,7 @@
       <a class="{% if request.resolver_match.url_name == 'todo' %}active{% endif %}" href="{% url 'photos:todo' %}">Заметки</a>
       <a class="{% if request.resolver_match.url_name == 'documents' or request.resolver_match.url_name == 'document_detail' %}active{% endif %}" href="{% url 'photos:documents' %}">Документы</a>
       {% if request.user.is_staff or request.user.is_superuser %}<a class="{% if request.resolver_match.url_name == 'media_library' %}active{% endif %}" href="{% url 'photos:media_library' %}">Медиатека</a>{% endif %}
+      <a class="{% if request.resolver_match.url_name == 'video_library' %}active{% endif %}" href="{% url 'photos:video_library' %}">Видео</a>
       <a class="{% if request.resolver_match.url_name == 'hentaidad_tool' %}active{% endif %}" href="{% url 'photos:hentaidad_tool' %}">Инструменты</a>
     {% endif %}
   </nav>

@@ -12,7 +12,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.db.models import Case, Count, IntegerField, Q, When
 from django.db.models.functions import Lower
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -571,6 +571,34 @@ def index(request):
 @admin_required
 def media_library(request):
     return render(request, "photos/index.html")
+
+
+@ensure_csrf_cookie
+@login_required
+def video_library(request):
+    root = ensure_media_folder("Videos")
+    error = ""
+    if request.method == "POST":
+        if not user_can_manage(request.user):
+            raise PermissionDenied("Загружать видео может только администратор")
+        uploads = [
+            upload for upload in request.FILES.getlist("videos")
+            if Path(upload.name).suffix.lower() in library.VIDEO_EXTENSIONS
+        ]
+        if not uploads:
+            error = "Выберите MP4, MOV, M4V или WEBM видео."
+        else:
+            result = library.save_uploaded_files(root, uploads)
+            if result["saved"]:
+                return redirect(f"{reverse('photos:video_library')}?uploaded={len(result['saved'])}")
+            error = "Видео не удалось сохранить."
+    listing = library.list_folder(root, 0, 200)
+    videos = [file for file in listing["files"] if file["type"] == "video"]
+    return render(request, "photos/video_library.html", {
+        "can_manage": user_can_manage(request.user),
+        "error": error,
+        "videos": videos,
+    })
 
 
 @ensure_csrf_cookie
@@ -1192,7 +1220,7 @@ def character_gallery_upload(request, character_id, character_slug):
         selected_files = [
             upload
             for upload in uploaded_files
-            if Path(upload.name).suffix.lower() in library.IMAGE_EXTENSIONS
+            if Path(upload.name).suffix.lower() in library.MEDIA_EXTENSIONS
         ]
         upload_target = current_rel
         if action == "upload" and new_folder_name:
@@ -1205,14 +1233,14 @@ def character_gallery_upload(request, character_id, character_slug):
         elif error:
             pass
         elif not uploaded_files:
-            error = "Выберите хотя бы одно изображение."
+            error = "Выберите хотя бы одно фото или видео."
         elif not selected_files:
-            error = "В выбранной папке нет поддерживаемых изображений."
+            error = "В выбранной папке нет поддерживаемых фото или видео."
         else:
             result = library.save_uploaded_files(upload_target, selected_files)
             if result["saved"]:
                 return redirect(f"{character.get_absolute_url()}?uploaded={len(result['saved'])}")
-            error = "Не удалось сохранить выбранные изображения."
+            error = "Не удалось сохранить выбранные медиафайлы."
 
     return render(request, "photos/character_gallery_upload.html", {
         "character": character,
@@ -1389,15 +1417,66 @@ def media(request, relative_path):
     is_restricted_poster = Title.objects.filter(is_adult=True, poster_path=clean).exists()
     if is_restricted_poster and not request.user.is_authenticated:
         return redirect_to_login(request.get_full_path())
-    if not clean.startswith("Covers/") and not user_can_manage(request.user):
+    is_shared_video = clean == "Videos" or clean.startswith("Videos/")
+    if not clean.startswith("Covers/") and not is_shared_video and not user_can_manage(request.user):
         if not request.user.is_authenticated:
             return redirect_to_login(request.get_full_path())
         raise PermissionDenied("Доступ к медиа разрешён только администратору")
+    if is_shared_video and not request.user.is_authenticated:
+        return redirect_to_login(request.get_full_path())
     if not absolute.is_file() or not library.is_media_file(absolute):
         return JsonResponse({"error": "Media not found"}, status=404)
+    if absolute.suffix.lower() in library.VIDEO_EXTENSIONS:
+        size = absolute.stat().st_size
+        range_header = request.headers.get("Range", "")
+        if range_header.startswith("bytes="):
+            requested = range_header.removeprefix("bytes=").split(",", 1)[0]
+            start_text, _, end_text = requested.partition("-")
+            try:
+                if start_text:
+                    start = int(start_text)
+                    end = int(end_text) if end_text else size - 1
+                else:
+                    suffix_length = int(end_text)
+                    start = max(0, size - suffix_length)
+                    end = size - 1
+                if start < 0 or start >= size or end < start:
+                    raise ValueError
+                end = min(end, size - 1)
+            except ValueError:
+                response = StreamingHttpResponse(status=416)
+                response["Content-Range"] = f"bytes */{size}"
+                return response
+
+            length = end - start + 1
+
+            def ranged_content():
+                with absolute.open("rb") as video_file:
+                    video_file.seek(start)
+                    remaining = length
+                    while remaining:
+                        chunk = video_file.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            response = StreamingHttpResponse(
+                ranged_content(),
+                status=206,
+                content_type=library.guess_content_type(absolute),
+            )
+            response["Content-Range"] = f"bytes {start}-{end}/{size}"
+            response["Content-Length"] = str(length)
+            response["Accept-Ranges"] = "bytes"
+            response["Content-Disposition"] = f'inline; filename="{absolute.name}"'
+            response["Cache-Control"] = "private, max-age=3600"
+            return response
     response = FileResponse(open(absolute, "rb"), content_type=library.guess_content_type(absolute))
     response["Content-Disposition"] = f'inline; filename="{absolute.name}"'
     response["Cache-Control"] = "private, max-age=3600"
+    if absolute.suffix.lower() in library.VIDEO_EXTENSIONS:
+        response["Accept-Ranges"] = "bytes"
     return response
 
 

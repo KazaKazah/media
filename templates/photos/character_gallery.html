@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Галерея {{ character.name }}</title>
     <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-collapsed-filters">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-video-library">
   </head>
   <body class="character-gallery-page">
     {% include 'photos/_app_navbar.html' %}
@@ -87,7 +87,7 @@
               {% if file.type == "image" %}
                 <img src="{% url 'photos:thumbnail' 'thumb' file.path %}" alt="{{ file.name }}" loading="lazy">
               {% else %}
-                <video src="{% url 'photos:media' file.path %}" muted preload="metadata"></video>
+                <video src="{% url 'photos:media' file.path %}" muted loop playsinline autoplay preload="metadata"></video>
                 <span class="character-video-badge">Видео</span>
               {% endif %}
               <span class="character-masonry-caption">{{ file.name }}</span>
@@ -189,6 +189,8 @@
         if (card.dataset.kind === "video") {
           media.controls = true;
           media.autoplay = true;
+          media.muted = true;
+          media.playsInline = true;
         }
         stage.replaceChildren(media);
         viewerName.textContent = card.dataset.name;

@@ -1,0 +1,58 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Видео — Drop and Tag</title>
+    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-video-library">
+  </head>
+  <body>
+    {% include 'photos/_app_navbar.html' %}
+    <main class="video-library-shell">
+      <header class="video-library-hero">
+        <div><span class="character-page-eyebrow">Отдельная коллекция</span><h1>Видеотека</h1><p>Длинные видео можно смотреть, ставить на паузу и перематывать прямо на сайте.</p></div>
+        <strong>{{ videos|length }} <small>видео</small></strong>
+      </header>
+
+      {% if request.GET.uploaded %}<div class="character-gallery-notice success">Загружено видео: {{ request.GET.uploaded }}.</div>{% endif %}
+      {% if error %}<div class="character-gallery-notice error">{{ error }}</div>{% endif %}
+
+      {% if can_manage %}
+        <form class="video-upload-panel" method="post" enctype="multipart/form-data" id="videoUploadForm">
+          {% csrf_token %}
+          <label for="videoFiles"><span>＋</span><strong>Добавить видео</strong><small>MP4, MOV, M4V или WEBM · можно выбрать несколько файлов</small></label>
+          <input id="videoFiles" name="videos" type="file" accept="video/*,.m4v" multiple required>
+          <button class="btn btn-success" type="submit">Загрузить</button>
+          <p>Для очень больших файлов дождитесь завершения загрузки и не закрывайте вкладку.</p>
+        </form>
+      {% endif %}
+
+      {% if videos %}
+        <section class="video-library-grid">
+          {% for video in videos %}
+            <article class="video-library-card">
+              <video controls preload="metadata" playsinline src="{% url 'photos:media' relative_path=video.path %}"></video>
+              <div><strong>{{ video.name }}</strong><small>{{ video.size|filesizeformat }}</small></div>
+            </article>
+          {% endfor %}
+        </section>
+      {% else %}
+        <section class="character-gallery-empty"><span>▶</span><h2>Видеотека пока пуста</h2><p>Загруженные сюда ролики будут храниться отдельно от тайтлов.</p></section>
+      {% endif %}
+    </main>
+    <script>
+      document.querySelector("#videoUploadForm")?.addEventListener("submit", (event) => {
+        const button = event.currentTarget.querySelector("button");
+        button.disabled = true;
+        button.textContent = "Загрузка…";
+      });
+      document.querySelectorAll(".video-library-card video").forEach((video) => {
+        video.addEventListener("play", () => document.querySelectorAll(".video-library-card video").forEach((other) => {
+          if (other !== video) other.pause();
+        }));
+      });
+    </script>
+  </body>
+</html>

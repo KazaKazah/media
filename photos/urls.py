@@ -13,6 +13,7 @@ urlpatterns = [
     path("documents/<int:pk>/delete/", views.document_delete, name="document_delete"),
     path("titles/", views.index, name="index"),
     path("library/", views.media_library, name="media_library"),
+    path("videos/", views.video_library, name="video_library"),
     path("tools/hentaidad/", views.hentaidad_tool, name="hentaidad_tool"),
     path("tools/hentaidad/download-single/", views.hentaidad_tool_download_single, name="hentaidad_tool_download_single"),
     path("tools/hentaidad/download/", views.hentaidad_tool_download, name="hentaidad_tool_download"),

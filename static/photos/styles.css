@@ -4118,6 +4118,31 @@ details[open] .character-editor-section-head::after {
   }
 }
 
+.video-library-shell { width: min(1760px, calc(100% - 32px)); margin: 22px auto 60px; }
+.video-library-hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 26px; border: 1px solid #d9e4de; border-radius: 20px; background: linear-gradient(135deg,#eef7f3,#fff8e8); }
+.video-library-hero h1 { margin: 2px 0; font-weight: 900; }
+.video-library-hero p { margin: 0; color: #65736d; }
+.video-library-hero > strong { min-width: 92px; padding: 12px; border-radius: 14px; background: #fff; text-align: center; font-size: 1.5rem; }
+.video-library-hero > strong small { display: block; color: #6b7872; font-size: .7rem; }
+.video-upload-panel { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; margin: 16px 0; padding: 16px; border: 1px dashed #8eb9aa; border-radius: 16px; background: #f5fbf8; }
+.video-upload-panel label { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; cursor: pointer; }
+.video-upload-panel label > span { grid-row: 1 / 3; font-size: 1.8rem; color: #177c6c; }
+.video-upload-panel label small { color: #65736d; }
+.video-upload-panel input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.video-upload-panel p { grid-column: 1 / -1; margin: 0; color: #7a6652; font-size: .78rem; }
+.video-library-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(360px,1fr)); gap: 16px; }
+.video-library-card { overflow: hidden; border: 1px solid #d9e4de; border-radius: 16px; background: #fff; box-shadow: 0 10px 28px rgba(24,52,42,.08); }
+.video-library-card video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #101312; object-fit: contain; }
+.video-library-card > div { display: flex; justify-content: space-between; gap: 10px; padding: 12px 14px; }
+.video-library-card strong { overflow-wrap: anywhere; }
+.video-library-card small { flex: 0 0 auto; color: #718079; }
+@media (max-width: 650px) {
+  .video-library-shell { width: min(100% - 18px,1760px); margin-top: 10px; }
+  .video-library-hero { align-items: flex-start; padding: 16px; }
+  .video-library-grid { grid-template-columns: 1fr; }
+  .video-upload-panel { grid-template-columns: 1fr; }
+}
+
 /* Shared creation dialogs */
 body.app-modal-open {
   position: fixed;

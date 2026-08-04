@@ -20,4 +20,4 @@ RUN mkdir -p /media/photos /app/data \
 EXPOSE 8000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["gunicorn", "dropandtag.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+CMD ["gunicorn", "dropandtag.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "3600"]
