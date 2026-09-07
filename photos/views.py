@@ -7,8 +7,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import redirect_to_login
+from django.contrib.auth.views import LoginView, redirect_to_login
 from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.db.models import Case, Count, IntegerField, Q, When
 from django.db.models.functions import Lower
@@ -22,6 +25,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
 from .forms import (
+    AccountCreationForm,
     CharacterCreateForm,
     CharacterFolderImportForm,
     CharacterForm,
@@ -32,6 +36,35 @@ from .forms import (
 from . import library
 from .note_crypto import NoteDecryptionError, decrypt_note, encrypt_note
 from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
+
+
+class AccountLoginView(LoginView):
+    template_name = "registration/login.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["allow_registration"] = settings.ALLOW_SELF_REGISTRATION
+        return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        expiry = settings.SESSION_COOKIE_AGE if self.request.POST.get("remember_me") else 0
+        self.request.session.set_expiry(expiry)
+        return response
+
+
+def signup(request):
+    if not settings.ALLOW_SELF_REGISTRATION:
+        raise Http404
+    if request.user.is_authenticated:
+        return redirect(settings.LOGIN_REDIRECT_URL)
+    form = AccountCreationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        login(request, user)
+        messages.success(request, "Учётная запись создана.")
+        return redirect(settings.LOGIN_REDIRECT_URL)
+    return render(request, "registration/signup.html", {"form": form})
 
 
 def json_error(error: Exception, status: int = 400):

@@ -1,0 +1,6 @@
+{% load static %}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Регистрация — Drop and Tag</title><link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}"><link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260902-auth"></head>
+<body class="login-page"><main class="login-shell"><section class="login-card"><header class="login-header"><p class="login-eyebrow">DROP AND TAG</p><h1>Создать аккаунт</h1><p>Заполните данные для доступа</p></header>
+{% if form.non_field_errors %}<div class="login-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+<form method="post" class="login-form">{% csrf_token %}
+{% for field in form %}<div class="login-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small class="login-help">{{ field.help_text|safe }}</small>{% endif %}{% for error in field.errors %}<small class="login-error">{{ error }}</small>{% endfor %}</div>{% endfor %}
+<button class="login-submit" type="submit">Создать аккаунт</button></form><p class="login-signup">Уже зарегистрированы? <a href="{% url 'login' %}">Войти</a></p></section></main></body></html>

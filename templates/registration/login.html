@@ -1,45 +1,40 @@
 {% load static %}
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Вход - Drop and Tag</title>
-    <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260804-video-library">
-  </head>
-  <body class="login-page">
-    <main class="login-shell">
-      <section class="login-card">
-        <div class="brand-mark mb-3">DT</div>
-        <h1 class="h3 mb-2">Drop and Tag</h1>
-        <p class="text-secondary mb-4">Войдите, чтобы открыть To-Do List, напоминания, заметки и личные записи.</p>
-
-        {% if form.errors %}
-          <div class="alert alert-danger">Неверный логин или пароль.</div>
-        {% endif %}
-
-        {% if next %}
-          <div class="alert alert-secondary">Сначала нужна авторизация.</div>
-        {% endif %}
-
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ next }}">
-
-          <div class="mb-3">
-            <label class="form-label" for="{{ form.username.id_for_label }}">Логин</label>
-            <input class="form-control" type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" autocomplete="username" required autofocus>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label" for="{{ form.password.id_for_label }}">Пароль</label>
-            <input class="form-control" type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" autocomplete="current-password" required>
-          </div>
-
-          <button class="btn btn-success w-100" type="submit">Войти</button>
-        </form>
-      </section>
-    </main>
-  </body>
-</html>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Безопасный вход в Drop and Tag"><title>Вход — Drop and Tag</title>
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'photos/styles.css' %}?v=20260902-gold-login">
+</head>
+<body class="login-page">
+<main class="login-shell"><section class="login-card" aria-labelledby="login-title">
+  <header class="login-header">
+    <span class="login-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4Zm7.4 8.4a7.4 7.4 0 0 0-14.8 0"/></svg></span>
+    <p class="login-eyebrow">DROP AND TAG</p><h1 id="login-title">С возвращением</h1><p>Войдите, чтобы продолжить работу</p>
+  </header>
+  {% if form.errors %}<div class="login-alert" role="alert">Неверный логин или пароль. Попробуйте ещё раз.</div>
+  {% elif next %}<div class="login-notice" role="status">Для доступа к этой странице сначала войдите.</div>{% endif %}
+  <form method="post" class="login-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+    <div class="login-field"><label for="{{ form.username.id_for_label }}">Логин</label>
+      <input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" value="{{ form.username.value|default:'' }}" placeholder="Введите логин" autocomplete="username" required autofocus>
+    </div>
+    <div class="login-field"><label for="{{ form.password.id_for_label }}">Пароль</label><div class="login-password-wrap">
+      <input type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" placeholder="Введите пароль" autocomplete="current-password" required>
+      <button class="login-password-toggle" type="button" aria-label="Показать пароль" aria-pressed="false">
+        <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+        <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.1A8.5 8.5 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8M6.2 6.3C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6a9 9 0 0 0 3-.5M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+      </button>
+    </div></div>
+    <div class="login-options">
+      <label class="login-check"><input type="checkbox" name="remember_me" value="1"><span>Запомнить меня</span></label>
+      <a href="{% url 'password_reset' %}">Забыли пароль?</a>
+    </div>
+    <button class="login-submit" type="submit">Войти</button>
+  </form>
+  {% if allow_registration %}<p class="login-signup">Нет учётной записи? <a href="{% url 'signup' %}">Создать</a></p>{% endif %}
+  <footer class="login-footer"><span></span><p>Защищённый доступ</p><span></span></footer>
+</section></main>
+<script>(()=>{const b=document.querySelector('.login-password-toggle'),i=document.getElementById('{{ form.password.id_for_label }}');if(!b||!i)return;b.addEventListener('click',()=>{const s=i.type==='password';i.type=s?'text':'password';b.setAttribute('aria-pressed',String(s));b.setAttribute('aria-label',s?'Скрыть пароль':'Показать пароль')})})();</script>
+</body></html>

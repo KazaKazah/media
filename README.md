@@ -36,6 +36,8 @@ http://адрес-nas:8000
 - `DJANGO_SECURE_SSL_REDIRECT` - включите `1`, если приложение всегда открывается через HTTPS.
 - `DJANGO_SECURE_HSTS_SECONDS` - HSTS TTL в секундах; оставьте `0`, если используете HTTP в локальной сети.
 - `DJANGO_SESSION_COOKIE_SECURE` и `DJANGO_CSRF_COOKIE_SECURE` - включите `1` только при HTTPS.
+- `DJANGO_ALLOW_REGISTRATION` — разрешить самостоятельную регистрацию (`1`/`0`). По умолчанию включена только в режиме разработки.
+- `DJANGO_EMAIL_BACKEND`, `DJANGO_EMAIL_HOST`, `DJANGO_EMAIL_PORT`, `DJANGO_EMAIL_HOST_USER`, `DJANGO_EMAIL_HOST_PASSWORD`, `DJANGO_EMAIL_USE_TLS` и `DJANGO_DEFAULT_FROM_EMAIL` — параметры отправки писем для восстановления пароля.
 
 ## Возможности
 
