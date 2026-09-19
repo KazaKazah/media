@@ -6,11 +6,57 @@ from zipfile import ZipFile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core import mail
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from .models import Character, TextDocument, Title, TodoItem, TodoProject, UserProfile
 from .note_crypto import NoteDecryptionError, decrypt_note, encrypt_note
+
+
+class AccountAuthTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            "auth-user", email="auth@example.com", password="test-password-42"
+        )
+
+    def test_login_uses_browser_session_by_default(self):
+        response = self.client.post("/accounts/login/", {
+            "username": self.user.username,
+            "password": "test-password-42",
+        })
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+        self.assertTrue(self.client.session.get_expire_at_browser_close())
+
+    def test_remember_me_keeps_session(self):
+        self.client.post("/accounts/login/", {
+            "username": self.user.username,
+            "password": "test-password-42",
+            "remember_me": "1",
+        })
+        self.assertFalse(self.client.session.get_expire_at_browser_close())
+
+    @override_settings(ALLOW_SELF_REGISTRATION=True)
+    def test_registration_creates_and_logs_in_user(self):
+        response = self.client.post("/accounts/signup/", {
+            "username": "new-user",
+            "email": "new@example.com",
+            "password1": "Safe-password-42",
+            "password2": "Safe-password-42",
+        })
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), get_user_model().objects.get(username="new-user").pk)
+
+    @override_settings(ALLOW_SELF_REGISTRATION=False)
+    def test_registration_can_be_disabled(self):
+        self.assertEqual(self.client.get("/accounts/signup/").status_code, 404)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_password_reset_sends_email(self):
+        response = self.client.post("/accounts/password-reset/", {"email": self.user.email})
+        self.assertRedirects(response, "/accounts/password-reset/done/")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/accounts/reset/", mail.outbox[0].body)
 
 
 class OptionalUserProfileTests(TestCase):

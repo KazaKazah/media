@@ -323,25 +323,71 @@ img {
 @media (max-width: 720px) { .notes-page { overflow: auto; }.notes-shell { height: auto; min-height: calc(100vh - 58px); grid-template-columns: 1fr; }.notes-topics { display: flex; gap: .35rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid #d9e2dd; padding: .55rem; }.notes-sidebar-head, .notes-topic-label, .notes-new-topic { display: none; }.notes-topic { flex: 0 0 auto; margin: 0; }.notes-list-panel { min-height: 320px; border-right: 0; border-bottom: 1px solid #d9e2dd; }.note-editor-panel { padding: .85rem; }.new-note-form, .new-note-passwords { grid-template-columns: 1fr; }.note-lock-screen form { grid-template-columns: 1fr; } }
 
 .login-page {
+  min-height: 100vh;
   display: grid;
   place-items: center;
+  overflow-x: hidden;
   padding: 1.25rem;
+  color: #f8f3e7;
   background:
-    radial-gradient(circle at 20% 20%, rgba(31, 122, 109, .14), transparent 28rem),
-    linear-gradient(135deg, #f7f8f5 0%, #e8eee9 100%);
+    radial-gradient(circle at 50% -15%, rgba(218, 165, 32, .13), transparent 34rem),
+    radial-gradient(circle at 0 100%, rgba(218, 165, 32, .06), transparent 28rem),
+    linear-gradient(145deg, #050505 0%, #101010 58%, #080808 100%);
 }
 
-.login-shell {
-  width: min(100%, 420px);
-}
+.login-shell { width: min(100%, 430px); }
 
 .login-card {
-  border: 1px solid var(--app-line);
-  border-radius: .85rem;
-  padding: 2rem;
-  background: var(--app-card);
-  box-shadow: 0 1.5rem 4rem rgba(38, 43, 40, .14);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(218, 165, 32, .86);
+  border-radius: 18px;
+  padding: clamp(1.6rem, 5vw, 2.25rem);
+  background: linear-gradient(145deg, rgba(31, 26, 13, .98), rgba(13, 13, 13, .99));
+  box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, .6), 0 0 35px rgba(218, 165, 32, .18);
 }
+
+.login-card::before { content: ""; height: 3px; position: absolute; inset: 0 0 auto; background: linear-gradient(90deg, transparent, #ffd700, transparent); }
+.login-header { text-align: center; }
+.login-avatar { width: 62px; height: 62px; display: grid; place-items: center; margin: 0 auto .9rem; border: 1px solid rgba(255,215,0,.48); border-radius: 50%; color: #ffd700; background: rgba(218,165,32,.08); box-shadow: 0 0 24px rgba(218,165,32,.18); }
+.login-avatar svg { width: 34px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.6; }
+.login-header .login-eyebrow { margin: 0 0 .35rem; color: #daa520; font-size: .68rem; font-weight: 800; letter-spacing: .22em; }
+.login-header h1 { margin: 0; color: #ffd700; font-size: clamp(1.55rem,5vw,1.9rem); font-weight: 750; text-shadow: 0 0 18px rgba(218,165,32,.3); }
+.login-header > p:last-child { margin: .45rem 0 1.55rem; color: #b8a978; font-size: .88rem; }
+.login-alert, .login-notice { border: 1px solid; border-radius: 9px; margin-bottom: 1rem; padding: .65rem .75rem; font-size: .8rem; }
+.login-alert { border-color: rgba(220,78,78,.6); color: #ffb8b8; background: rgba(130,25,25,.22); }
+.login-notice { border-color: rgba(218,165,32,.35); color: #dbc985; background: rgba(218,165,32,.07); }
+.login-form { display: grid; gap: 1rem; }
+.login-field { display: grid; gap: .4rem; }
+.login-field label { color: #daa520; font-size: .8rem; font-weight: 650; }
+.login-field input { width: 100%; border: 1px solid #9d781c; border-radius: 9px; padding: .72rem .8rem; outline: 0; color: #fff; background: rgba(26,21,9,.8); transition: .18s ease; }
+.login-field input::placeholder { color: #776c51; }
+.login-field input:focus { border-color: #ffd700; background: #1a1509; box-shadow: 0 0 0 .2rem rgba(218,165,32,.18); }
+.login-password-wrap { position: relative; }
+.login-password-wrap input { padding-right: 3rem; }
+.login-password-toggle { width: 42px; height: 100%; display: grid; place-items: center; position: absolute; top: 0; right: 0; border: 0; padding: 0; color: #c39a2c; background: transparent; cursor: pointer; }
+.login-password-toggle:hover, .login-password-toggle:focus-visible { color: #ffd700; }
+.login-password-toggle svg { width: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.login-password-toggle .eye-closed, .login-password-toggle[aria-pressed="true"] .eye-open { display: none; }
+.login-password-toggle[aria-pressed="true"] .eye-closed { display: block; }
+.login-submit { border: 0; border-radius: 9px; margin-top: .25rem; padding: .76rem 1rem; color: #171000; background: linear-gradient(135deg,#daa520,#ffd700); box-shadow: 0 .55rem 1.4rem rgba(218,165,32,.18); font-weight: 800; cursor: pointer; transition: .18s ease; }
+.login-submit:hover { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 .75rem 1.7rem rgba(218,165,32,.27); }
+.login-submit:active { transform: translateY(0); }
+.login-submit-link { display: block; color: #171000; text-align: center; text-decoration: none; }
+.login-submit-link:hover { color: #171000; }
+.login-options { display: flex; justify-content: space-between; gap: 1rem; align-items: center; color: #a79870; font-size: .76rem; }
+.login-options a, .login-signup a { color: #e3b72e; text-decoration: none; }
+.login-options a:hover, .login-signup a:hover { color: #ffd700; text-decoration: underline; }
+.login-check { display: inline-flex; gap: .45rem; align-items: center; cursor: pointer; }
+.login-check input { width: 1rem; height: 1rem; margin: 0; accent-color: #daa520; }
+.login-signup { margin: 1.1rem 0 0; color: #8e8262; font-size: .78rem; text-align: center; }
+.login-help { color: #8e8262; font-size: .69rem; line-height: 1.4; }
+.login-help ul { margin: .25rem 0 0; padding-left: 1.15rem; }
+.login-error { color: #ff9e9e; font-size: .72rem; }
+.login-footer { display: grid; grid-template-columns: 1fr auto 1fr; gap: .75rem; align-items: center; margin-top: 1.5rem; color: #746744; }
+.login-footer span { height: 1px; background: linear-gradient(90deg,transparent,rgba(218,165,32,.45)); }
+.login-footer span:last-child { transform: scaleX(-1); }
+.login-footer p { margin: 0; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
 
 .todo-page {
   background:
